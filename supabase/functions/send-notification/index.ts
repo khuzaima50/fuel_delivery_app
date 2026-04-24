@@ -278,8 +278,10 @@ serve(async (req: Request) => {
         driver_id: target_id,
         title: title,
         body: body,
+        message: body, // Added for compatibility with Flutter UI
         type: data?.type || 'system',
-        is_read: false
+        is_read: false,
+        order_id: data?.order_id || null
       });
       dbError = error;
     } else if (target_type === "user") {
@@ -287,8 +289,10 @@ serve(async (req: Request) => {
         user_id: target_id,
         title: title,
         body: body,
+        message: body, // Added for compatibility with Flutter UI
         type: data?.type || 'system',
-        is_read: false
+        is_read: false,
+        order_id: data?.order_id || null
       });
       dbError = error;
     }

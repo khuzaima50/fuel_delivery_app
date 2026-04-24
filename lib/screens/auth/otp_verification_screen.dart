@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import '../../services/otp_service.dart';
-
+import '../../services/notification_service.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String email;
@@ -78,6 +79,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     if (success) {
       if (mounted) {
+        // Sync notification token now that user is logged in
+        unawaited(NotificationService.syncToken());
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Verification Successful!"),

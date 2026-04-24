@@ -10,6 +10,7 @@ import '../order/assigned_orders_screen.dart';
 import '../profile/settings_screen.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -18,6 +19,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  // Static flag: survives pushReplacement — welcome notification only fires once per app session
+  static bool _welcomeShown = false;
+
   bool _isOnline = false;
   String _driverName = "Loading...";
   String _truckId = "Fetching...";
@@ -59,15 +63,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _isOnline = profile['status'] == 'online';
           _profileImageUrl = profile['avatar_url'];
           
-          // Data Null Safety & Fetching
-          if (profile['current_fuel_capacity'] != null) {
-            _currentFuel = double.tryParse(profile['current_fuel_capacity'].toString()) ?? 0.0;
-          } else {
-            _currentFuel = 0.0;
-          }
-          _isFuelLoading = false;
         });
+
+        // ── Dynamic Fuel Calculation ──
+        final now = DateTime.now();
+        final startOfDay = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+        
+        try {
+          final completedOrders = await Supabase.instance.client
+              .from('orders')
+              .select('id')
+              .eq('driver_id', user.id)
+              .inFilter('status', ['completed', 'delivered'])
+              .gte('completed_at', startOfDay);
+
+          final int completedToday = (completedOrders as List).length;
+          double calculatedFuel = _maxFuelCapacity - (completedToday * 10.0);
+          
+          if (mounted) {
+            setState(() {
+              _currentFuel = calculatedFuel < 0 ? 0 : calculatedFuel;
+              _isFuelLoading = false;
+            });
+          }
+        } catch (e) {
+          debugPrint('Error calculating fuel: $e');
+          if (mounted) {
+            setState(() {
+              _currentFuel = _maxFuelCapacity; // Fallback to full
+              _isFuelLoading = false;
+            });
+          }
+        }
+
+        // Trigger Welcome Notification ONCE per app session (not on every tab switch)
+        if (!_welcomeShown) {
+          _welcomeShown = true;
+          NotificationService.showImmediateNotification(
+            title: 'Welcome back! 👋',
+            body: 'Good to see you, $_driverName! Ready to deliver today?',
+            type: 'system',
+          );
+        }
       } else if (mounted) {
+
         setState(() {
           _driverName = user.email?.split('@')[0] ?? 'Driver Team';
           _truckId = 'Fuel Tanker - 01';

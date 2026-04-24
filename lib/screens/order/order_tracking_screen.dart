@@ -7,7 +7,7 @@ import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../../services/location_service.dart';
 import 'safety_checklist_starting_screen.dart';
 
@@ -40,28 +40,7 @@ class OrderTrackingScreen extends StatefulWidget {
 class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     with TickerProviderStateMixin {
   // ── Map style (Silver / InDrive look) ─────────────────────────────────────
-  static const String _mapStyle = '''
-[
-  {"elementType":"geometry","stylers":[{"color":"#f5f5f5"}]},
-  {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#f5f5f5"}]},
-  {"featureType":"administrative.land_parcel","elementType":"labels.text.fill","stylers":[{"color":"#bdbdbd"}]},
-  {"featureType":"poi","elementType":"geometry","stylers":[{"color":"#eeeeee"}]},
-  {"featureType":"poi","elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},
-  {"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#e5e5e5"}]},
-  {"featureType":"poi.park","elementType":"labels.text.fill","stylers":[{"color":"#9e9e9e"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-  {"featureType":"road.arterial","elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#dadada"}]},
-  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
-  {"featureType":"road.local","elementType":"labels.text.fill","stylers":[{"color":"#9e9e9e"}]},
-  {"featureType":"transit.line","elementType":"geometry","stylers":[{"color":"#e5e5e5"}]},
-  {"featureType":"transit.station","elementType":"geometry","stylers":[{"color":"#eeeeee"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#c9c9c9"}]},
-  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#9e9e9e"}]}
-]
-''';
+
 
   // ── Map & markers ──────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
@@ -87,7 +66,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
   // ── Stats ──────────────────────────────────────────────────────────────────
   String _arrivalTime = 'Calculating...';
   int _estimatedMinutes = 0;
-  double _distanceKm = 0;
 
   final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
   late final PolylinePoints _polylinePoints;
@@ -258,7 +236,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     final formatted = DateFormat('h:mm a').format(arrival);
     if (mounted) {
       setState(() {
-        _distanceKm = km;
         _estimatedMinutes = mins;
         _arrivalTime = formatted;
       });
@@ -371,7 +348,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                 target: initialPos,
                 zoom: 14,
               ),
-              style: _mapStyle,
               zoomControlsEnabled: false,
               myLocationEnabled: false,
               myLocationButtonEnabled: false,
@@ -417,66 +393,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
               ),
             ),
           ),
-
-          // Title
-          Positioned(
-            top: 70,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.07),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: const Text(
-                  'Live Tracking',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Distance badge
-          if (_distanceKm > 0)
-            Positioned(
-              top: 70,
-              right: 24,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF6600),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFF6600).withValues(alpha: 0.3),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: Text(
-                  '${_distanceKm.toStringAsFixed(1)} km',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ),
 
           // Bottom tracking card
           Align(
@@ -588,48 +504,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                   ],
                   const SizedBox(height: 16),
 
-                  // Open in Google Maps
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        if (widget.deliveryLat != null &&
-                            widget.deliveryLng != null) {
-                          final url = Uri.parse(
-                            'https://www.google.com/maps/dir/?api=1'
-                            '&destination=${widget.deliveryLat},${widget.deliveryLng}',
-                          );
-                          if (await canLaunchUrl(url)) {
-                            await launchUrl(url,
-                                mode: LaunchMode.externalApplication);
-                          } else if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content:
-                                      Text('Could not open Google Maps.')),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.navigation_rounded,
-                          color: Color(0xFFFF6600), size: 18),
-                      label: const Text(
-                        'Open in Google Maps',
-                        style: TextStyle(
-                          color: Color(0xFFFF6600),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFFF6600)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
+
                   const SizedBox(height: 14),
                   const Divider(color: Color(0xFFEEEEEE), height: 1),
                   const SizedBox(height: 18),

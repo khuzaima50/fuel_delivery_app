@@ -35,14 +35,14 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
     try {
       final auth = Supabase.instance.client.auth;
       final user = auth.currentUser ?? auth.currentSession?.user;
-      
-      debugPrint("Attempting vehicle save. User: ${user?.id}, Session: ${auth.currentSession != null}");
+
+      debugPrint('[Vehicle] Saving vehicle. User: ${user?.id}, Session: ${auth.currentSession != null}');
 
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text("Session lost. Please log in again."),
+              content: const Text('Session lost. Please log in again.'),
               action: SnackBarAction(
                 label: 'Log In',
                 onPressed: () {
@@ -57,29 +57,56 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
             ),
           );
         }
-        throw Exception("Authentication session not found.");
+        throw Exception('Authentication session not found.');
       }
 
-      final make = _makeController.text.trim();
+      final make  = _makeController.text.trim();
       final model = _modelController.text.trim();
-      final year = int.tryParse(_yearController.text.trim()) ?? DateTime.now().year;
+      final year  = int.tryParse(_yearController.text.trim()) ?? DateTime.now().year;
       final plate = _plateController.text.trim().toUpperCase();
 
-      // 1. Insert into driver_vehicles
-      await Supabase.instance.client.from('driver_vehicles').insert({
-        'driver_id': user.id,
-        'make': make,
-        'model': model,
-        'year': year,
-        'license_plate': plate,
-      });
+      // 1. Upsert into driver_vehicles
+      //    Using upsert so retrying after a network error won't create duplicates.
+      //    Supabase upsert on (driver_id, license_plate) requires a unique index;
+      //    if that doesn't exist yet, the SQL migration adds it.
+      try {
+        await Supabase.instance.client.from('driver_vehicles').upsert({
+          'driver_id':     user.id,
+          'make':          make,
+          'model':         model,
+          'year':          year,
+          'license_plate': plate,
+          'updated_at':    DateTime.now().toUtc().toIso8601String(),
+        }, onConflict: 'driver_id, license_plate');
+        debugPrint('[Vehicle] driver_vehicles upserted ✓');
+      } catch (vehicleErr) {
+        debugPrint('[Vehicle] driver_vehicles error: $vehicleErr');
+        // If the unique conflict index doesn't exist yet, fall back to plain insert
+        await Supabase.instance.client.from('driver_vehicles').insert({
+          'driver_id':     user.id,
+          'make':          make,
+          'model':         model,
+          'year':          year,
+          'license_plate': plate,
+        });
+        debugPrint('[Vehicle] driver_vehicles inserted (fallback) ✓');
+      }
 
       // 2. Update drivers table with vehicle_type representation
-      final vehicleType = "$make $model ($plate)";
-      await Supabase.instance.client
-          .from('drivers')
-          .update({'vehicle_type': vehicleType})
-          .eq('id', user.id);
+      final vehicleType = '$make $model ($plate)';
+      try {
+        await Supabase.instance.client
+            .from('drivers')
+            .update({
+              'vehicle_type': vehicleType,
+              'updated_at':   DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', user.id);
+        debugPrint('[Vehicle] drivers.vehicle_type updated ✓');
+      } catch (driverErr) {
+        debugPrint('[Vehicle] drivers update error (non-fatal): $driverErr');
+        // Non-fatal — the vehicle row is already saved. Continue.
+      }
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -87,10 +114,11 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
         );
       }
     } catch (e) {
+      debugPrint('[Vehicle] Submit failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to save vehicle details: $e"),
+            content: Text('Failed to save vehicle details: $e'),
             backgroundColor: Colors.redAccent,
           ),
         );

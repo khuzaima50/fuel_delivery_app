@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -43,6 +44,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
 
   // ── GPS stream ────────────────────────────────────────────────────────────
   final DriverLocationStream _gpsTracker = DriverLocationStream();
+  StreamSubscription<ServiceStatus>? _serviceStatusSub;
 
   // ── Smooth marker animation ───────────────────────────────────────────────
   AnimationController? _markerAnimController;
@@ -56,6 +58,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   bool _isLoadingRoute = false;
   bool _routeFetched = false;
   bool _isArrived = false;
+  bool _arrivedNotifShown = false; // guard: arrival notification fires only once per trip
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   double _distanceKm = 0.0;
@@ -78,27 +81,12 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
 
   // -- Directions API (direct HTTP call -- no third-party package) ----------
   final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
-
-  // ── Map style ─────────────────────────────────────────────────────────────
-  static const String _mapStyle = '''
-[
-  {"elementType":"geometry","stylers":[{"color":"#f5f5f5"}]},
-  {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#f5f5f5"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-  {"featureType":"road.arterial","elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#dadada"}]},
-  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
-  {"featureType":"road.local","elementType":"labels.text.fill","stylers":[{"color":"#9e9e9e"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#c9c9c9"}]},
-  {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#9e9e9e"}]}
-]
-''';
+  late final PolylinePoints _polylinePoints;
 
   @override
   void initState() {
     super.initState();
+    _polylinePoints = PolylinePoints(apiKey: _apiKey);
 
     // Marker animation controller
     _markerAnimController = AnimationController(
@@ -114,6 +102,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   @override
   void dispose() {
     _gpsTracker.dispose();
+    _serviceStatusSub?.cancel();
     _markerAnimController?.dispose();
     _mapController?.dispose();
     super.dispose();
@@ -168,7 +157,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
       try {
         final fresh = await Supabase.instance.client
             .from('orders')
-            .select()
+            .select('*, profiles:user_id(phone_number)')
             .eq('id', orderId)
             .maybeSingle();
         if (fresh != null) {
@@ -184,11 +173,20 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
           // Also grab address / phone if not yet set
           final freshAddress = fresh['delivery_address']?.toString() ??
               fresh['address']?.toString() ?? address;
-          final freshPhone = fresh['customer_phone']?.toString() ?? _customerPhone;
+
+          // Enhanced phone resolution: orders.customer_phone -> profiles.phone_number
+          String? freshPhone = fresh['customer_phone']?.toString();
+          if (freshPhone == null || freshPhone.isEmpty) {
+            final profiles = fresh['profiles'];
+            if (profiles is Map) {
+              freshPhone = profiles['phone_number']?.toString();
+            }
+          }
+
           if (mounted) {
             setState(() {
               _destAddress = freshAddress.isNotEmpty ? freshAddress : 'Customer Location';
-              _customerPhone = freshPhone;
+              _customerPhone = freshPhone ?? _customerPhone;
             });
           }
         }
@@ -197,6 +195,28 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
       }
     } else if (address.isNotEmpty) {
       if (mounted) setState(() => _destAddress = address);
+    }
+
+    // ── Step 2b: Always fetch phone number from profiles unconditionally ──
+    //    Runs even when lat/lng are already present, ensuring the call button
+    //    always has a valid number regardless of how this screen was opened.
+    final userId = order?['user_id']?.toString();
+    if ((_customerPhone == null || _customerPhone!.isEmpty) && userId != null) {
+      debugPrint('[Order Fetch] Fetching phone from profiles for user $userId');
+      try {
+        final profileData = await Supabase.instance.client
+            .from('profiles')
+            .select('phone_number')
+            .eq('id', userId)
+            .maybeSingle();
+        final fetchedPhone = profileData?['phone_number']?.toString();
+        if (fetchedPhone != null && fetchedPhone.isNotEmpty) {
+          if (mounted) setState(() => _customerPhone = fetchedPhone);
+          debugPrint('[Order Fetch] Phone resolved from profiles: $fetchedPhone');
+        }
+      } catch (e) {
+        debugPrint('[Order Fetch] Profile phone fetch error: $e');
+      }
     }
 
     // ── Step 3: Geocode address → lat/lng if still missing ────────────────
@@ -299,6 +319,15 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
 
   // ── Start GPS stream ──────────────────────────────────────────────────────
   Future<void> _startLocationStream() async {
+    // 1. Listen for service status changes (auto-recovery)
+    _serviceStatusSub ??= Geolocator.getServiceStatusStream().listen((status) {
+      if (status == ServiceStatus.enabled) {
+        debugPrint('[Location] GPS service enabled — re-starting tracker');
+        if (mounted) setState(() => _gpsDisabled = false);
+        _startLocationStream();
+      }
+    });
+
     final ok = await _gpsTracker.start(
       dbThrottleSeconds: 3,
       onPosition: _onNewPosition,
@@ -437,35 +466,6 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     }
   }
 
-  // -- Google Directions API: decode encoded polyline string ----------------
-  List<LatLng> _decodePolyline(String encoded) {
-    final List<LatLng> points = [];
-    int index = 0;
-    final int len = encoded.length;
-    int lat = 0, lng = 0;
-    while (index < len) {
-      int b, shift = 0, result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1F) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      final int dLat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lat += dLat;
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1F) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      final int dLng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lng += dLng;
-      points.add(LatLng(lat / 1e5, lng / 1e5));
-    }
-    return points;
-  }
-
   // -- Fetch Google Directions API route ------------------------------------
   Future<void> _fetchRoute(Position driverPos) async {
     final dLat = _destLat;
@@ -477,96 +477,55 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     }
     if (_isLoadingRoute) return;
 
-    debugPrint('[Route Input] driver: ${driverPos.latitude},${driverPos.longitude}');
-    debugPrint('[Route Input] destination: $dLat,$dLng');
-
     if (mounted) setState(() => _isLoadingRoute = true);
 
     try {
-      final uri = Uri.parse(
-        'https://maps.googleapis.com/maps/api/directions/json'
-        '?origin=${driverPos.latitude},${driverPos.longitude}'
-        '&destination=$dLat,$dLng'
-        '&mode=driving'
-        '&key=$_apiKey',
+      final result = await _polylinePoints.getRouteBetweenCoordinates(
+        // ignore: deprecated_member_use
+        request: PolylineRequest(
+          origin: PointLatLng(driverPos.latitude, driverPos.longitude),
+          destination: PointLatLng(dLat, dLng),
+          mode: TravelMode.driving,
+        ),
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (!mounted) return;
 
-      if (response.statusCode != 200) {
-        debugPrint('[Route API Response] HTTP error ${response.statusCode}');
-        if (mounted) setState(() => _isLoadingRoute = false);
-        return;
-      }
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final status = data['status'] as String? ?? 'UNKNOWN';
-      debugPrint('[Route API Response] status=$status');
-
-      if (status != 'OK') {
-        debugPrint('[Route ERROR] API status=$status -- ${data['error_message'] ?? 'no details'}');
-        if (mounted) setState(() => _isLoadingRoute = false);
-        return;
-      }
-
-      final routes = data['routes'] as List?;
-      if (routes == null || routes.isEmpty) {
-        debugPrint('[Route ERROR] No routes returned');
-        if (mounted) setState(() => _isLoadingRoute = false);
-        return;
-      }
-
-      final encodedPolyline =
-          (routes[0]['overview_polyline']['points'] as String?) ?? '';
-      final previewLen = encodedPolyline.length > 80 ? 80 : encodedPolyline.length;
-      debugPrint('[Polyline Raw] ${encodedPolyline.substring(0, previewLen)}...');
-
-      if (encodedPolyline.isEmpty) {
-        debugPrint('[Polyline ERROR] Empty polyline string');
-        if (mounted) setState(() => _isLoadingRoute = false);
-        return;
-      }
-
-      final decodedPoints = _decodePolyline(encodedPolyline);
-      debugPrint('[Polyline Points] count = ${decodedPoints.length}');
-
-      if (decodedPoints.length < 2) {
-        debugPrint('[Polyline ERROR] Too few points: ${decodedPoints.length}');
-        if (mounted) setState(() => _isLoadingRoute = false);
-        return;
-      }
-
-      _routePoints
-        ..clear()
-        ..addAll(decodedPoints);
-
-      _markers.removeWhere((m) => m.markerId.value == 'destination');
-      _markers.add(Marker(
-        markerId: const MarkerId('destination'),
-        position: LatLng(dLat, dLng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: InfoWindow(title: _destAddress),
-        zIndexInt: 1,
-      ));
-
-      debugPrint('[Polyline Drawn] ${decodedPoints.length} points rendered on map');
-
-      setState(() {
-        _routeFetched = true;
-        _isLoadingRoute = false;
-        _polylines
+      if (result.points.isNotEmpty) {
+        _routePoints
           ..clear()
-          ..add(Polyline(
-            polylineId: const PolylineId('route'),
-            color: const Color(0xFF4285F4),
-            points: List<LatLng>.from(decodedPoints),
-            width: 6,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-          ));
-      });
+          ..addAll(result.points.map((p) => LatLng(p.latitude, p.longitude)));
+
+        _markers.removeWhere((m) => m.markerId.value == 'destination');
+        _markers.add(Marker(
+          markerId: const MarkerId('destination'),
+          position: LatLng(dLat, dLng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: InfoWindow(title: _destAddress),
+          zIndexInt: 1,
+        ));
+
+        debugPrint('[Polyline Drawn] ${_routePoints.length} points rendered on map');
+
+        setState(() {
+          _routeFetched = true;
+          _isLoadingRoute = false;
+          _polylines
+            ..clear()
+            ..add(Polyline(
+              polylineId: const PolylineId('route'),
+              color: const Color(0xFF4285F4),
+              points: List<LatLng>.from(_routePoints),
+              width: 5,
+              jointType: JointType.round,
+              startCap: Cap.roundCap,
+              endCap: Cap.roundCap,
+            ));
+        });
+      } else {
+        debugPrint('[Route ERROR] No points returned: ${result.errorMessage}');
+        if (mounted) setState(() => _isLoadingRoute = false);
+      }
     } catch (e) {
       debugPrint('[Route ERROR] Exception: $e');
       if (mounted) setState(() => _isLoadingRoute = false);
@@ -595,15 +554,6 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     }
   }
 
-  // ── Navigate in Google Maps ───────────────────────────────────────────────
-  Future<void> _openGoogleMaps() async {
-    if (_destLat == null || _destLng == null) return;
-    final url =
-        Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$_destLat,$_destLng');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
-  }
 
   // ── Call customer ─────────────────────────────────────────────────────────
   Future<void> _callCustomer() async {
@@ -614,8 +564,20 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
       );
       return;
     }
-    final uri = Uri(scheme: 'tel', path: phone);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    final uri = Uri.parse('tel:$phone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch phone dialer. Please check permissions.')),
+        );
+      }
+    }
   }
 
   // ── Arrived button handler ────────────────────────────────────────────────
@@ -624,25 +586,41 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     if (orderId != null) {
       try {
         final now = DateTime.now().toUtc().toIso8601String();
+        // 1. Update status in DB
         await Supabase.instance.client.from('orders').update({
-          'status': 'assigned',
+          'status': 'driver_arrived',
           'arrived_at': now,
         }).eq('id', orderId);
-        widget.order?['status'] = 'assigned';
+
+        // 2. Update local state
+        widget.order?['status'] = 'driver_arrived';
         widget.order?['arrived_at'] = now;
 
+        // 3. Notify Customer (via helper if desired, but trigger often handles this)
         final userId = widget.order?['user_id']?.toString();
         if (userId != null && userId.isNotEmpty) {
           NotificationService.notifyUserDriverArrived(userId, orderId);
         }
+
+        // 4. Notify Driver (Immediate feedback) — only once per trip
+        if (!_arrivedNotifShown) {
+          _arrivedNotifShown = true;
+          NotificationService.showImmediateNotification(
+            title: 'Arrived at Customer! 📍',
+            body: 'Please proceed with the safety checklist.',
+            type: 'order',
+            orderId: orderId,
+          );
+        }
+
       } catch (e) {
         debugPrint('[RealTimeDelivery] arrived update error: $e');
       }
     }
+
     if (mounted) {
       Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) =>
-            SafetyChecklistStartingScreen(order: widget.order),
+        builder: (_) => SafetyChecklistStartingScreen(order: widget.order),
       ));
     }
   }
@@ -651,7 +629,17 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   @override
   Widget build(BuildContext context) {
     // ── Permission / GPS error screens ─────────────────────────────────────
-    if (_gpsDisabled) return _errorScreen('GPS is disabled', 'Please turn on Location Services in your device settings.', Icons.location_disabled_rounded);
+    if (_gpsDisabled) {
+      return _errorScreen(
+        'GPS is disabled',
+        'Please turn on Location Services in your device settings.',
+        Icons.location_disabled_rounded,
+        actionLabel: 'Open GPS Settings',
+        onAction: () async {
+          await Geolocator.openLocationSettings();
+        },
+      );
+    }
     if (_locationPermissionDenied) {
       return _errorScreen(
         'Location Permission Denied',
@@ -674,41 +662,20 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Google Map ──────────────────────────────────────────────────
           Positioned.fill(
             child: GoogleMap(
               mapType: MapType.normal,
-              style: _mapStyle,
+              // style: null → renders the default Google Maps look (roads, POIs,
+              // labels and landmarks exactly as the native Google Maps app shows them)
               initialCameraPosition:
                   CameraPosition(target: initialTarget, zoom: 14),
-              myLocationEnabled: false, // we control the marker ourselves
+              myLocationEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               compassEnabled: true,
               markers: Set<Marker>.of(_markers),
               polylines: Set<Polyline>.of(_polylines),
               onMapCreated: _onMapCreated,
-            ),
-          ),
-
-          // ── Subtle gradient overlay (top + bottom) ───────────────────────
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.12),
-                      Colors.transparent,
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.45),
-                    ],
-                    stops: const [0, 0.15, 0.65, 1.0],
-                  ),
-                ),
-              ),
             ),
           ),
 
@@ -824,37 +791,6 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                       _circleBtn(Icons.arrow_back_ios_new,
                           () => Navigator.of(context).pop(),
                           size: 18),
-                      GestureDetector(
-                        onTap: _openGoogleMaps,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF4D00),
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF4D00).withValues(alpha: 0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.navigation_rounded,
-                                  color: Colors.white, size: 16),
-                              SizedBox(width: 6),
-                              Text('Navigate',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 14),

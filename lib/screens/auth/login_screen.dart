@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import '../../services/otp_service.dart';
+import '../../services/notification_service.dart';
 import 'otp_verification_screen.dart';
 import '../../screens/dashboard/dashboard_screen.dart';
 import 'sign_up_screen.dart';
@@ -59,6 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
         } catch (e) {
           debugPrint("Failed to create driver profile on login: $e");
         }
+
+        // Sync notification token now that user is logged in
+        unawaited(NotificationService.syncToken());
 
         // Trigger OTP
         final otpSent = await OtpService.sendOtp(email);

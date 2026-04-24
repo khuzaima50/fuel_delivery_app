@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/notification_service.dart';
 import 'delivery_complete_screen.dart';
 
+
 class SafetyComplianceScreen extends StatefulWidget {
   final String? meterPhotoUrl;
   final double deliveredGallons;
@@ -270,8 +271,10 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
 
                           // Step 3: CRITICAL — mark order as delivered
                           debugPrint('[SafetyCompliance] Updating order to delivered...');
+                          final String nowIso = DateTime.now().toUtc().toIso8601String();
                           try {
                             // Prepare update map — using 'fuel_quantity' as requested
+                            // delivered_at is set so the Delivered tab 24-hour filter works
                             final Map<String, dynamic> updateData = {
                               'status': 'delivered',
                               'driver_id': user.id,
@@ -279,7 +282,8 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                               'driver_earning': totalAmount,
                               'fuel_quantity': widget.deliveredGallons,
                               'fuel_quantity_gallons': widget.deliveredGallons,
-                              'completed_at': DateTime.now().toUtc().toIso8601String(),
+                              'completed_at': nowIso,
+                              'delivered_at': nowIso,
                             };
 
                             // Try primary update
@@ -296,13 +300,14 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                                  await Supabase.instance.client.from('orders').update({
                                    'status': 'delivered',
                                    'total_amount': totalAmount,
-                                   'completed_at': DateTime.now().toUtc().toIso8601String(),
+                                   'completed_at': nowIso,
+                                   'delivered_at': nowIso,
                                  }).eq('id', orderId);
                                } catch (fallbackError) {
                                   throw primaryError;
                                }
-                            } else if (errorStr.contains('completed_at')) {
-                               // Fallback: update without completed_at
+                            } else if (errorStr.contains('completed_at') || errorStr.contains('delivered_at')) {
+                               // Fallback: update without timestamp columns
                                 await Supabase.instance.client.from('orders').update({
                                  'status': 'delivered',
                                  'total_amount': totalAmount,
@@ -321,6 +326,14 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                                 userId, orderId);
                           }
                           
+                          // Trigger Notification
+                          NotificationService.showImmediateNotification(
+                            title: 'Delivery Complete! ✅',
+                            body: 'Order #${orderId.substring(0, 4).toUpperCase()} has been successfully delivered.',
+                            type: 'order',
+                            orderId: orderId,
+                          );
+
                           // Step 4: Insert into earnings table
                           try {
                             await Supabase.instance.client.from('earnings').insert({

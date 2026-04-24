@@ -234,6 +234,16 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     }
   }
 
+  /// Safely parse an ISO timestamp string for sorting. Returns epoch on failure.
+  DateTime _parseTs(dynamic raw) {
+    if (raw == null) return DateTime.fromMillisecondsSinceEpoch(0);
+    try {
+      return DateTime.parse(raw.toString()).toUtc();
+    } catch (_) {
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -394,6 +404,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       );
     }
 
+    final now = DateTime.now().toUtc();
+    final cutoff24h = now.subtract(const Duration(hours: 24));
+
     final filteredOrders = _orders.where((o) {
       final status = o['status']?.toString().toLowerCase().trim() ?? '';
       final driverId = o['driver_id'];
@@ -412,10 +425,31 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       }
       if (_activeFilterIndex == 2) return status == 'emergency' && driverId == myId;
       if (_activeFilterIndex == 3) {
-        return (status == 'delivered' || status == 'completed') && driverId == myId;
+        // Only show delivered/completed orders from the last 24 hours
+        if (!((status == 'delivered' || status == 'completed') && driverId == myId)) {
+          return false;
+        }
+        // 24-hour filter: use delivered_at first, fall back to completed_at
+        final rawTs = o['delivered_at'] ?? o['completed_at'];
+        if (rawTs == null) return true; // no timestamp → include (just completed)
+        try {
+          final ts = DateTime.parse(rawTs.toString()).toUtc();
+          return ts.isAfter(cutoff24h);
+        } catch (_) {
+          return true; // unparseable → include
+        }
       }
       return false;
     }).toList();
+
+    // Sort Delivered tab by delivered_at DESC so the latest completed order is on top.
+    if (_activeFilterIndex == 3) {
+      filteredOrders.sort((a, b) {
+        DateTime tsA = _parseTs(a['delivered_at'] ?? a['completed_at'] ?? a['created_at']);
+        DateTime tsB = _parseTs(b['delivered_at'] ?? b['completed_at'] ?? b['created_at']);
+        return tsB.compareTo(tsA); // descending: newest first
+      });
+    }
 
     if (filteredOrders.isEmpty) {
       return Center(
@@ -447,7 +481,12 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         if (isAvailable) {
           formattedTime = 'NEW';
         } else {
-          final timeSource = order['assigned_at'] ?? order['accepted_at'] ?? order['created_at'];
+          // For delivered orders, prefer delivered_at; otherwise use assigned/accepted/created
+          final statusLowForTime = order['status']?.toString().toLowerCase() ?? '';
+          final isDelivered = statusLowForTime == 'delivered' || statusLowForTime == 'completed';
+          final timeSource = isDelivered
+              ? (order['delivered_at'] ?? order['completed_at'] ?? order['assigned_at'] ?? order['accepted_at'] ?? order['created_at'])
+              : (order['assigned_at'] ?? order['accepted_at'] ?? order['created_at']);
           if (timeSource != null) {
             try {
               final parsedTime = DateTime.parse(timeSource.toString()).toLocal();

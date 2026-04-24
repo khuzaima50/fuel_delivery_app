@@ -7,7 +7,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 import '../../services/location_service.dart';
 import 'fuel_pickup_screen.dart';
 
@@ -69,19 +68,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
   // ── Directions API (direct HTTP call — no third-party package) ──────────
   final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
 
-  static const String _mapStyle = '''
-[
-  {"elementType":"geometry","stylers":[{"color":"#f5f5f5"}]},
-  {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-  {"elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
-  {"elementType":"labels.text.stroke","stylers":[{"color":"#f5f5f5"}]},
-  {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
-  {"featureType":"road.arterial","elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},
-  {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#dadada"}]},
-  {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
-  {"featureType":"water","elementType":"geometry","stylers":[{"color":"#c9c9c9"}]}
-]
-''';
+
 
   @override
   void initState() {
@@ -393,18 +380,6 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     }
   }
 
-  Future<void> _openGoogleMaps() async {
-    if (_destLat == null || _destLng == null) return;
-    final url = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=$_destLat,$_destLng');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open Google Maps.')),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -438,7 +413,6 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
           Positioned.fill(
             child: GoogleMap(
               mapType: MapType.normal,
-              style: _mapStyle,
               initialCameraPosition:
                   CameraPosition(target: initialTarget, zoom: 14),
               myLocationEnabled: false,
@@ -478,136 +452,12 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                         () => Navigator.of(context).pop(),
                         size: 18,
                       ),
-                      GestureDetector(
-                        onTap: _openGoogleMaps,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF4D00),
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF4D00)
-                                    .withValues(alpha: 0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.navigation_rounded,
-                                  color: Colors.white, size: 18),
-                              SizedBox(width: 6),
-                              Text(
-                                'Google Maps',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Navigation info card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFE8DD),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.alt_route_rounded,
-                            color: Color(0xFFFF4D00),
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _destLat != null
-                                    ? 'Navigating to customer'
-                                    : 'No destination set',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1F1F1F),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _destinationLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF888888),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
             ),
           ),
-
-          // ── Distance badge (top right) ─────────────────────────────────
-          if (_distanceKm > 0)
-            Positioned(
-              top: 108,
-              right: 20,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF4D00),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFF4D00).withValues(alpha: 0.3),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: Text(
-                  '${_distanceKm.toStringAsFixed(1)} km',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13),
-                ),
-              ),
-            ),
 
           // ── Bottom panel ─────────────────────────────────────────────────
           Align(

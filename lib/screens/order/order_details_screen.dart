@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 import '../../services/notification_service.dart';
 import '../chat/chat_screen.dart';
 import 'delivery_navigation_screen.dart';
+
 
 class OrderDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -21,13 +23,38 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize from order data
     _customerName = (widget.order['customer_name'] != null &&
             widget.order['customer_name'].toString().trim().isNotEmpty)
         ? widget.order['customer_name'].toString()
         : 'Loading...';
     _customerPhone = widget.order['customer_phone'] ?? '';
     _resolveCustomerInfo();
+    // Always re-fetch fresh data for delivered/completed orders to ensure
+    // amount, timestamps and status are not stale from the list cache.
+    final rawStatus = widget.order['status']?.toString().toLowerCase() ?? '';
+    if (rawStatus == 'delivered' || rawStatus == 'completed') {
+      _refreshOrderFromDb();
+    }
+  }
+
+  // Re-fetches the latest order row from Supabase and updates local state.
+  Future<void> _refreshOrderFromDb() async {
+    final orderId = widget.order['id']?.toString();
+    if (orderId == null || orderId.isEmpty) return;
+    try {
+      final fresh = await Supabase.instance.client
+          .from('orders')
+          .select()
+          .eq('id', orderId)
+          .maybeSingle();
+      if (fresh != null && mounted) {
+        // Merge fresh values into widget.order so build() picks them up
+        fresh.forEach((k, v) => widget.order[k] = v);
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('OrderDetails re-fetch error: $e');
+    }
   }
 
   Future<void> _resolveCustomerInfo() async {
@@ -70,11 +97,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       }
       return;
     }
-    final Uri callUri = Uri(scheme: 'tel', path: phone);
-    if (await canLaunchUrl(callUri)) {
-      await launchUrl(callUri);
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch phone dialer.')));
+    final Uri callUri = Uri.parse('tel:$phone');
+    try {
+      if (await canLaunchUrl(callUri)) {
+        await launchUrl(callUri);
+      } else {
+        await launchUrl(callUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch phone dialer.')));
+      }
     }
   }
 
@@ -96,11 +129,29 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ? double.tryParse(order['customer_rating'].toString())
         : null;
 
-    final rawAmount = order['total_amount'];
+    // Check multiple possible keys for the order amount.
+    // driver_earning is always written at completion; fall back through other keys.
+    final rawAmount = order['driver_earning'] ??
+        order['total_amount'] ??
+        order['total_price'] ??
+        order['price'] ??
+        order['amount'];
     final double amountVal = rawAmount != null
         ? (double.tryParse(rawAmount.toString()) ?? 0.0)
         : 0.0;
-    final String amount = amountVal > 0 ? amountVal.toStringAsFixed(2) : 'N/A';
+    final String amount = amountVal > 0 ? amountVal.toStringAsFixed(2) : '0.00';
+    final bool isDelivered = status == 'DELIVERED' || status == 'COMPLETED';
+    
+    // Helper to format timeline dates (MMM dd, hh:mm a)
+    String formatTimelineDate(String? isoString) {
+      if (isoString == null || isoString.isEmpty) return '--:--';
+      try {
+        final date = DateTime.parse(isoString).toLocal();
+        return DateFormat('MMM dd, hh:mm a').format(date);
+      } catch (e) {
+        return '--:--';
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFFBFBFB),
@@ -142,8 +193,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             ),
             Text(
               status,
-              style: const TextStyle(
-                color: Color(0xFFFF4D00),
+              style: TextStyle(
+                color: (status == 'COMPLETED' || status == 'DELIVERED') ? Colors.green : const Color(0xFFFF4D00),
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.5,
@@ -153,27 +204,28 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                  ),
-                ],
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.phone, color: Colors.blueAccent, size: 20),
-                onPressed: () {
-                  _makePhoneCall(context, _customerPhone);
-                },
+          if (!(status == 'COMPLETED' || status == 'DELIVERED'))
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.phone, color: Colors.blueAccent, size: 20),
+                  onPressed: () {
+                    _makePhoneCall(context, _customerPhone);
+                  },
+                ),
               ),
             ),
-          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -242,36 +294,37 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         ],
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        final userId = order['user_id']?.toString();
-                        if (userId != null && userId.isNotEmpty) {
-                          Navigator.of(context).push(MaterialPageRoute(
-                            builder: (c) => ChatScreen(
-                              orderId: order['id'].toString(),
-                              customerId: userId,
-                              customerName: _customerName,
-                            ),
-                          ));
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Customer information not available for chat.')),
-                          );
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFF4D00),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.chat_rounded,
-                          color: Colors.white,
-                          size: 20,
+                    if (!(status == 'COMPLETED' || status == 'DELIVERED'))
+                      GestureDetector(
+                        onTap: () {
+                          final userId = order['user_id']?.toString();
+                          if (userId != null && userId.isNotEmpty) {
+                            Navigator.of(context).push(MaterialPageRoute(
+                              builder: (c) => ChatScreen(
+                                orderId: order['id'].toString(),
+                                customerId: userId,
+                                customerName: _customerName,
+                              ),
+                            ));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Customer information not available for chat.')),
+                            );
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFF4D00),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.chat_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -321,11 +374,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       ),
                     ),
                     Text(
-                      amountVal > 0 ? '\$$amount' : 'Pending',
+                      // For delivered/completed orders: never show 'Pending'.
+                      // Show the amount if available, otherwise 'Completed ✓'.
+                      isDelivered
+                          ? (amountVal > 0 ? '\$$amount' : 'Completed ✓')
+                          : (amountVal > 0 ? '\$$amount' : 'Pending'),
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
-                        color: amountVal > 0 ? const Color(0xFFFF4D00) : const Color(0xFF888888),
+                        color: isDelivered
+                            ? (amountVal > 0 ? const Color(0xFFFF4D00) : Colors.green)
+                            : (amountVal > 0 ? const Color(0xFFFF4D00) : const Color(0xFF888888)),
                       ),
                     ),
                   ],
@@ -356,64 +415,61 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             letterSpacing: 0.5,
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () async {
-                            // Extract real customer coordinates
-                            double? lat = double.tryParse(
-                                (order['customer_lat'] ?? order['delivery_lat'])?.toString() ?? '');
-                            double? lng = double.tryParse(
-                                (order['customer_lng'] ?? order['delivery_lng'])?.toString() ?? '');
-                            if (lat == 0.0) lat = null;
-                            if (lng == 0.0) lng = null;
+                        if (!(status == 'COMPLETED' || status == 'DELIVERED'))
+                          GestureDetector(
+                            onTap: () async {
+                              // Extract real customer coordinates
+                              double? lat = double.tryParse(
+                                  (order['customer_lat'] ?? order['delivery_lat'])?.toString() ?? '');
+                              double? lng = double.tryParse(
+                                  (order['customer_lng'] ?? order['delivery_lng'])?.toString() ?? '');
+                              if (lat == 0.0) lat = null;
+                              if (lng == 0.0) lng = null;
 
-                            // Try to open in Google Maps first if coordinates exist
-                            if (lat != null && lng != null) {
-                              final mapUrl = Uri.parse(
-                                'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-                              );
-                              if (await canLaunchUrl(mapUrl)) {
-                                await launchUrl(mapUrl, mode: LaunchMode.externalApplication);
-                                return;
+                              // Try to open in Google Maps first if coordinates exist
+                              if (lat != null && lng != null) {
+                                final mapUrl = Uri.parse(
+                                  'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                                );
+                                if (await canLaunchUrl(mapUrl)) {
+                                  await launchUrl(mapUrl, mode: LaunchMode.externalApplication);
+                                  return;
+                                }
                               }
-                            }
 
-                            // Fallback: open the in-app DeliveryNavigationScreen
-                            if (status == 'ACCEPTED' || status == 'ASSIGNED') {
-                              await Supabase.instance.client.from('orders').update({
-                                'status': 'in_progress',
-                                'accepted_at': DateTime.now().toUtc().toIso8601String(),
-                                'driver_id': Supabase.instance.client.auth.currentUser?.id,
-                              }).eq('id', order['id']);
-                              widget.order['status'] = 'in_progress';
-                              if (context.mounted) {
-                                Navigator.of(context).push(MaterialPageRoute(
-                                    builder: (c) => DeliveryNavigationScreen(order: order)));
+                              // Fallback: open the in-app DeliveryNavigationScreen
+                              if (status == 'ACCEPTED' || status == 'ASSIGNED') {
+                                await Supabase.instance.client.from('orders').update({
+                                  'status': 'in_progress',
+                                  'accepted_at': DateTime.now().toUtc().toIso8601String(),
+                                  'driver_id': Supabase.instance.client.auth.currentUser?.id,
+                                }).eq('id', order['id']);
+                                widget.order['status'] = 'in_progress';
+                                if (context.mounted) {
+                                  Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (c) => DeliveryNavigationScreen(order: order)));
+                                }
                               }
-                              if (context.mounted) {
-                                Navigator.of(context).push(MaterialPageRoute(
-                                    builder: (c) => DeliveryNavigationScreen(order: order)));
-                              }
-                            }
-                          },
-                          child: Row(
-                            children: const [
-                              Text(
-                                'Navigate',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFFFF4D00),
+                            },
+                            child: Row(
+                              children: const [
+                                Text(
+                                  'Navigate',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFFF4D00),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: 4),
-                              Icon(
-                                Icons.explore,
-                                color: Color(0xFFFF4D00),
-                                size: 16,
-                              ),
-                            ],
+                                SizedBox(width: 4),
+                                Icon(
+                                  Icons.explore,
+                                  color: Color(0xFFFF4D00),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -453,35 +509,27 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     const SizedBox(height: 16),
                     _buildTimelineItem(
                       'Order Placed',
-                      order['created_at'] != null 
-                        ? DateTime.parse(order['created_at']).toLocal().toString().substring(11, 16)
-                        : '--:--',
+                      formatTimelineDate(order['created_at']),
                       Icons.receipt_long,
                       const Color(0xFF2196F3),
                     ),
                     _buildTimelineItem(
                       'Order Accepted',
-                      order['accepted_at'] != null 
-                        ? DateTime.parse(order['accepted_at']).toLocal().toString().substring(11, 16)
-                        : (status == 'ACCEPTED' ? 'Just now' : '--:--'),
+                      formatTimelineDate(order['accepted_at']),
                       Icons.check_circle_outline,
-                      status == 'ACCEPTED' || status == 'IN_PROGRESS' ? const Color(0xFF4CAF50) : Colors.grey,
+                      order['accepted_at'] != null ? const Color(0xFF4CAF50) : Colors.grey,
                     ),
                     _buildTimelineItem(
                       'Driver Arrived',
-                      order['arrived_at'] != null 
-                        ? DateTime.parse(order['arrived_at']).toLocal().toString().substring(11, 16)
-                        : '--:--',
+                      formatTimelineDate(order['arrived_at']),
                       Icons.location_on,
-                      status == 'DRIVER_ARRIVED' ? const Color(0xFFFFB800) : Colors.grey,
+                      order['arrived_at'] != null ? const Color(0xFFFFB800) : Colors.grey,
                     ),
                     _buildTimelineItem(
                       'Order Completed',
-                      order['completed_at'] != null 
-                        ? DateTime.parse(order['completed_at']).toLocal().toString().substring(11, 16)
-                        : '--:--',
+                      formatTimelineDate(order['completed_at'] ?? order['delivered_at']),
                       Icons.flag_outlined,
-                      status == 'COMPLETED' ? const Color(0xFFFF4900) : Colors.grey,
+                      (order['completed_at'] != null || order['delivered_at'] != null) ? const Color(0xFFFF4900) : Colors.grey,
                     ),
                   ],
                 ),
@@ -491,56 +539,67 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          color: Colors.white,
-        child: SizedBox(
-          width: double.infinity,
-          height: 58,
-          child: ElevatedButton(
-            onPressed: () async {
-              // Update order status to in_progress / en route
-              if (order['status'] == 'accepted') {
-                await Supabase.instance.client.from('orders').update({
-                  'status': 'in_progress',
-                  'accepted_at': DateTime.now().toUtc().toIso8601String(),
-                  'driver_id': Supabase.instance.client.auth.currentUser?.id,
-                }).eq('id', order['id']);
-                widget.order['status'] = 'in_progress';
+      bottomNavigationBar: (status == 'COMPLETED' || status == 'DELIVERED')
+          ? null
+          : SafeArea(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                color: Colors.white,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 58,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      // Update order status to in_progress / en route
+                      if (order['status'] == 'accepted') {
+                        await Supabase.instance.client.from('orders').update({
+                          'status': 'in_progress',
+                          'accepted_at': DateTime.now().toUtc().toIso8601String(),
+                          'driver_id': Supabase.instance.client.auth.currentUser?.id,
+                        }).eq('id', order['id']);
+                        widget.order['status'] = 'in_progress';
 
-                // Notify customer: delivery has started
-                final userId = order['user_id']?.toString();
-                if (userId != null && userId.isNotEmpty) {
-                  NotificationService.notifyUserDeliveryStarted(
-                      userId, order['id'].toString());
-                }
-              }
+                        // Notify customer: delivery has started
+                        final userId = order['user_id']?.toString();
+                        if (userId != null && userId.isNotEmpty) {
+                          NotificationService.notifyUserDeliveryStarted(
+                              userId, order['id'].toString());
+                        }
 
-              if (context.mounted) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => DeliveryNavigationScreen(order: widget.order),
+                        // Trigger Local Notification for Driver
+                        NotificationService.showImmediateNotification(
+                          title: 'Delivery Journey Started! 🚀',
+                          body: 'Heading to source location for pickup.',
+                          type: 'order',
+                          orderId: order['id']?.toString(),
+                        );
+                      }
+
+                      if (context.mounted) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                DeliveryNavigationScreen(order: widget.order),
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4D00),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Start Delivery Journey',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    ),
                   ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF4D00),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              elevation: 0,
             ),
-            child: const Text(
-              'Start Delivery Journey',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ),
-      ),
-      ),
     );
   }
 

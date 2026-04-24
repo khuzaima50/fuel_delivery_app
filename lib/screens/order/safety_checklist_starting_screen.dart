@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../chat/chat_screen.dart';
 import 'confirm_protocol_screen.dart';
 
 class SafetyChecklistStartingScreen extends StatefulWidget {
@@ -34,12 +36,14 @@ class _SafetyChecklistStartingScreenState
   }
 
   String _customerName = 'Loading...';
+  String? _customerPhone;
   String _vehicleInfo = 'Loading...';
   String _arrivalTime = 'Calculating...';
 
   @override
   void initState() {
     super.initState();
+    _customerPhone = widget.order?['customer_phone']?.toString();
     _resolveCustomerName();
     _resolveVehicleInfo();
     _computeArrivalTime();
@@ -141,10 +145,12 @@ class _SafetyChecklistStartingScreenState
             .maybeSingle();
         if (profile != null && mounted) {
           final name = profile['full_name']?.toString().trim();
-          if (name != null && name.isNotEmpty) {
-            setState(() => _customerName = name);
-            return;
-          }
+          final phone = profile['phone_number']?.toString().trim();
+          setState(() {
+            if (name != null && name.isNotEmpty) _customerName = name;
+            if (phone != null && phone.isNotEmpty) _customerPhone = phone;
+          });
+          return;
         }
       } catch (e) {
         debugPrint('[SafetyChecklist] profiles fetch error: $e');
@@ -319,9 +325,23 @@ class _SafetyChecklistStartingScreenState
                         ),
                         Row(
                           children: [
-                            _buildInfoActionIcon(Icons.chat_bubble_rounded),
+                            _buildInfoActionIcon(Icons.chat_bubble_rounded, () {
+                              final userId = widget.order?['user_id']?.toString();
+                              if (_customerName != 'Loading...' && _customerName != 'Customer' && userId != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (c) => ChatScreen(
+                                      customerName: _customerName,
+                                      customerId: userId,
+                                      orderId: widget.order?['id']?.toString() ?? '',
+                                    ),
+                                  ),
+                                );
+                              }
+                            }),
                             const SizedBox(width: 12),
-                            _buildInfoActionIcon(Icons.phone_rounded),
+                            _buildInfoActionIcon(Icons.phone_rounded, _callCustomer),
                           ],
                         ),
                       ],
@@ -565,15 +585,42 @@ class _SafetyChecklistStartingScreenState
     );
   }
 
-  Widget _buildInfoActionIcon(IconData icon) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: const BoxDecoration(
-        color: Color(0xFFFF4D00),
-        shape: BoxShape.circle,
+  Future<void> _callCustomer() async {
+    final phone = _customerPhone;
+    if (phone == null || phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number available.')),
+      );
+      return;
+    }
+    final uri = Uri.parse('tel:$phone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch phone dialer.')),
+        );
+      }
+    }
+  }
+
+  Widget _buildInfoActionIcon(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: const BoxDecoration(
+          color: Color(0xFFFF4D00),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 18),
       ),
-      child: Icon(icon, color: Colors.white, size: 18),
     );
   }
 
