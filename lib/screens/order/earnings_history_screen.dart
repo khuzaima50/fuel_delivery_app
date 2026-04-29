@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'order_details_screen.dart';
 
 class EarningsHistoryScreen extends StatefulWidget {
   const EarningsHistoryScreen({super.key});
@@ -196,10 +197,19 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _buildDeliveryItem(
-                      title: '$fuelType ($qty Gal)',
-                      subtitle: timeStr,
-                      amount: amount,
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => OrderDetailsScreen(order: order),
+                          ),
+                        );
+                      },
+                      child: _buildDeliveryItem(
+                        title: '$fuelType ($qty Gal)',
+                        subtitle: timeStr,
+                        amount: amount,
+                      ),
                     ),
                   );
                 }),

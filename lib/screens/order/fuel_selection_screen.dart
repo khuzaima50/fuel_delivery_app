@@ -134,7 +134,7 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Approx. range: 650 km',
+                      'Approx. range: 400 miles',
                       style: TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                     const SizedBox(height: 32),

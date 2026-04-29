@@ -6,7 +6,9 @@ import '../../services/notification_service.dart';
 import 'otp_verification_screen.dart';
 import '../../screens/dashboard/dashboard_screen.dart';
 import 'sign_up_screen.dart';
-
+import 'profile_setup_screen.dart';
+import 'vehicle_info_screen.dart';
+import 'document_verification_screen.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -38,53 +40,70 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
 
-      if (res.user != null) {
-        try {
-          final profile = await Supabase.instance.client
-              .from('drivers')
-              .select()
-              .eq('id', res.user!.id)
-              .maybeSingle();
-              
-          if (profile == null) {
-            // Get name from user metadata if available
-            final userMeta = res.user!.userMetadata;
-            final fullName = userMeta?['full_name'] ?? email.split('@').first;
-            
-            await Supabase.instance.client.from('drivers').insert({
-              'id': res.user!.id,
-              'full_name': fullName,
-              'email': email,
-              'phone': userMeta?['phone'] ?? '',
-            });
-          }
-        } catch (e) {
-          debugPrint("Failed to create driver profile on login: $e");
-        }
-
-        // Sync notification token now that user is logged in
-        unawaited(NotificationService.syncToken());
-
-        // Trigger OTP
-        final otpSent = await OtpService.sendOtp(email);
+        Widget nextRoute = const DashboardScreen();
         
-        if (mounted) {
-          if (otpSent) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => OtpVerificationScreen(
-                  email: email,
-                  nextScreen: const DashboardScreen(),
+        if (res.user != null) {
+          try {
+            final profile = await Supabase.instance.client
+                .from('drivers')
+                .select()
+                .eq('id', res.user!.id)
+                .maybeSingle();
+                
+            if (profile == null) {
+              // Get name from user metadata if available
+              final userMeta = res.user!.userMetadata;
+              final fullName = userMeta?['full_name'] ?? email.split('@').first;
+              
+              await Supabase.instance.client.from('drivers').insert({
+                'id': res.user!.id,
+                'full_name': fullName,
+                'email': email,
+                'phone': userMeta?['phone'] ?? '',
+              });
+              
+              nextRoute = const DocumentVerificationScreen();
+            } else {
+              final docsSubmitted = profile['documents_submitted'] == true;
+              final profileCompleted = profile['is_profile_completed'] == true;
+              final vehicleAdded = profile['vehicle_type'] != null &&
+                  (profile['vehicle_type'] as String).isNotEmpty;
+
+              if (!docsSubmitted) {
+                nextRoute = const DocumentVerificationScreen();
+              } else if (!profileCompleted) {
+                nextRoute = const ProfileSetupScreen();
+              } else if (!vehicleAdded) {
+                nextRoute = const VehicleInfoScreen();
+              }
+            }
+          } catch (e) {
+            debugPrint("Failed to create/check driver profile on login: $e");
+          }
+
+          // Sync notification token now that user is logged in
+          unawaited(NotificationService.syncToken());
+
+          // Trigger OTP
+          final otpSent = await OtpService.sendOtp(email);
+          
+          if (mounted) {
+            if (otpSent) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => OtpVerificationScreen(
+                    email: email,
+                    nextScreen: nextRoute,
+                  ),
                 ),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Failed to send verification code. Please try again.")),
-            );
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Failed to send verification code. Please try again.")),
+              );
+            }
           }
         }
-      }
     } on AuthException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

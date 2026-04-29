@@ -61,15 +61,14 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   bool _arrivedNotifShown = false; // guard: arrival notification fires only once per trip
 
   // ── Stats ──────────────────────────────────────────────────────────────────
-  double _distanceKm = 0.0;
+  double _distanceMiles = 0.0;
   int _estimatedMinutes = 0;
   String _etaTime = '--:--';
 
-  // ── Driver profile ────────────────────────────────────────────────────────
-  String _driverName = 'Loading...';
-  String? _avatarUrl;
-  double _driverRating = 4.9;
-  int _totalDeliveries = 0;
+  // ── Customer profile ───────────────────────────────────────────────────────
+  String _customerName = 'Customer';
+  String? _customerAvatarUrl;
+  double _customerRating = 5.0;
 
   // ── Destination (mutable — resolved async) ───────────────────────────────
   double? _destLat;
@@ -94,7 +93,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
       duration: const Duration(milliseconds: 500),
     );
 
-    _fetchDriverData();
+    _fetchCustomerData();
     _startLocationStream();
     _resolveDestination(); // async — resolves lat/lng from order
   }
@@ -290,30 +289,28 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     }
   }
 
-  // ── Driver profile fetch ──────────────────────────────────────────────────
-  Future<void> _fetchDriverData() async {
+  // ── Customer profile fetch ────────────────────────────────────────────────
+  Future<void> _fetchCustomerData() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+      final userId = widget.order?['user_id']?.toString();
+      if (userId == null) return;
+
       final profile = await Supabase.instance.client
-          .from('drivers')
+          .from('profiles')
           .select()
-          .eq('id', user.id)
+          .eq('id', userId)
           .maybeSingle();
+
       if (profile != null && mounted) {
         setState(() {
-          _driverName = profile['full_name'] ?? 'Driver';
-          _avatarUrl = profile['avatar_url'];
-          _driverRating = (profile['rating'] as num?)?.toDouble() ?? 4.9;
-          _totalDeliveries = (profile['total_deliveries'] as num?)?.toInt() ?? 0;
+          _customerName = profile['full_name'] ?? profile['username'] ?? 'Customer';
+          _customerAvatarUrl = profile['avatar_url'];
+          _customerRating = (profile['rating'] as num?)?.toDouble() ?? 5.0;
+          _customerPhone = profile['phone_number'] ?? _customerPhone;
         });
-      } else if (mounted) {
-        final user2 = Supabase.instance.client.auth.currentUser;
-        setState(
-            () => _driverName = user2?.email?.split('@')[0] ?? 'Driver');
       }
     } catch (e) {
-      debugPrint('[RealTimeDelivery] profile fetch error: $e');
+      debugPrint('[RealTimeDelivery] customer profile fetch error: $e');
     }
   }
 
@@ -449,8 +446,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     if (dLat == null || dLng == null) return;
     final distM = Geolocator.distanceBetween(
         pos.latitude, pos.longitude, dLat, dLng);
-    final km = distM / 1000.0;
-    final mins = math.max(1, (km / 30.0 * 60.0).ceil());
+    final miles = distM / 1609.34;
+    final mins = math.max(1, (miles / 18.64 * 60.0).ceil()); // 30 km/h is approx 18.64 mph
     final arrival = DateTime.now().add(Duration(minutes: mins));
     final h = arrival.hour > 12
         ? arrival.hour - 12
@@ -459,7 +456,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     final ampm = arrival.hour >= 12 ? 'PM' : 'AM';
     if (mounted) {
       setState(() {
-        _distanceKm = km;
+        _distanceMiles = miles;
         _estimatedMinutes = mins;
         _etaTime = '$h:$m $ampm';
       });
@@ -892,8 +889,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                       const SizedBox(width: 10),
                       _statBox(
                           'DIST',
-                          _distanceKm > 0
-                              ? '${_distanceKm.toStringAsFixed(1)} km'
+                          _distanceMiles > 0
+                              ? '${_distanceMiles.toStringAsFixed(1)} miles'
                               : '--'),
                     ],
                   ),
@@ -912,8 +909,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                         CircleAvatar(
                           radius: 22,
                           backgroundImage: NetworkImage(
-                            _avatarUrl != null && _avatarUrl!.isNotEmpty
-                                ? _avatarUrl!
+                            _customerAvatarUrl != null && _customerAvatarUrl!.isNotEmpty
+                                ? _customerAvatarUrl!
                                 : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format',
                           ),
                           backgroundColor: const Color(0xFFEEEEEE),
@@ -923,7 +920,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(_driverName,
+                              Text(_customerName,
                                   style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w800,
@@ -934,15 +931,15 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                                     color: Color(0xFFFFB800), size: 12),
                                 const SizedBox(width: 4),
                                 Text(
-                                  _driverRating.toStringAsFixed(1),
+                                  _customerRating.toStringAsFixed(1),
                                   style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                       color: Color(0xFFFFB800)),
                                 ),
-                                const SizedBox(width: 4),
-                                Text('($_totalDeliveries deliveries)',
-                                    style: const TextStyle(
+                                const SizedBox(width: 8),
+                                const Text('Customer',
+                                    style: TextStyle(
                                         fontSize: 11,
                                         color: Color(0xFF888888),
                                         fontWeight: FontWeight.w500)),

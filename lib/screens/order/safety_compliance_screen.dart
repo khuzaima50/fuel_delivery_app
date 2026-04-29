@@ -7,11 +7,13 @@ import 'delivery_complete_screen.dart';
 class SafetyComplianceScreen extends StatefulWidget {
   final String? meterPhotoUrl;
   final double deliveredGallons;
+  final double pricePerGallon;
   final Map<String, dynamic>? order;
   const SafetyComplianceScreen({
     super.key,
     this.meterPhotoUrl,
     this.deliveredGallons = 0.0,
+    this.pricePerGallon = 4.85,
     this.order,
   });
 
@@ -233,11 +235,7 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                           if (orderId == null) throw Exception('Order ID could not be determined.');
                           debugPrint('[SafetyCompliance] Using orderId: $orderId');
 
-                          final double pricePerGallon =
-                              double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
-                              double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
-                              4.85;
-                          final double totalAmount = widget.deliveredGallons * pricePerGallon;
+                          final double totalAmount = widget.deliveredGallons * widget.pricePerGallon;
                           final String fuelType = widget.order?['fuel_type']?.toString() ?? 'Fuel';
                           final String address = widget.order?['delivery_address']?.toString() ?? '';
 
@@ -300,6 +298,7 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                                  await Supabase.instance.client.from('orders').update({
                                    'status': 'delivered',
                                    'total_amount': totalAmount,
+                                   'driver_earning': totalAmount,
                                    'completed_at': nowIso,
                                    'delivered_at': nowIso,
                                  }).eq('id', orderId);
@@ -308,9 +307,10 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                                }
                             } else if (errorStr.contains('completed_at') || errorStr.contains('delivered_at')) {
                                // Fallback: update without timestamp columns
-                                await Supabase.instance.client.from('orders').update({
+                                 await Supabase.instance.client.from('orders').update({
                                  'status': 'delivered',
                                  'total_amount': totalAmount,
+                                 'driver_earning': totalAmount,
                                  'fuel_quantity': widget.deliveredGallons,
                                }).eq('id', orderId);
                             } else {

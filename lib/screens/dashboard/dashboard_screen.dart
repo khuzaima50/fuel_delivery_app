@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -26,49 +27,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _driverName = "Loading...";
   String _truckId = "Fetching...";
   Map<String, dynamic>? _activeOrder;
-  bool _isLoading = true;
+  bool _isLoading = true;        // true only on first load
+  bool _isFetching = false;      // guards against concurrent fetches
   double _currentFuel = 0;
   final double _maxFuelCapacity = 100; // Max tank capacity in gallons
   bool _isFuelLoading = true;
   String? _profileImageUrl;
 
+  // ── Debounce / cancellation ────────────────────────────────────────
+  /// Each fetch increments this token.  A stale in-flight fetch can detect
+  /// it has been superseded and bail out without updating state.
+  int _fetchToken = 0;
+
+  /// Pending debounce timer – collapsed rapid calls into a single fetch.
+  Timer? _debounceTimer;
+
+  /// Watchdog that auto-recovers if a fetch gets stuck in loading.
+  Timer? _watchdogTimer;
+
   @override
   void initState() {
     super.initState();
-    _fetchDashboardData();
+    _scheduleFetch();
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _watchdogTimer?.cancel();
+    super.dispose();
+  }
+
+  // ── Debounced fetch entry-point ────────────────────────────────────
+  /// Call this instead of `_fetchDashboardData` directly.
+  /// Collapses rapid consecutive calls into a single fetch after 300 ms.
+  void _scheduleFetch() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _fetchDashboardData();
+    });
   }
 
   Future<void> _fetchDashboardData() async {
+    // ── Prevent concurrent requests ────────────────────────────────────
+    if (_isFetching) {
+      debugPrint('[Dashboard] Fetch already in-flight — skipping duplicate request');
+      return;
+    }
+
+    // Grab a token that identifies THIS request.  If a newer request starts
+    // before this one finishes the token will have changed and we bail early.
+    final int myToken = ++_fetchToken;
+    _isFetching = true;
+
+    // ── Watchdog: auto-recover if stuck loading for > 15 s ────────────
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer(const Duration(seconds: 15), () {
+      if (mounted && _isLoading) {
+        debugPrint('[Dashboard] ⚠ Watchdog fired — clearing stuck loading state');
+        setState(() {
+          _isLoading = false;
+          _isFetching = false;
+          _isFuelLoading = false;
+        });
+      }
+    });
+
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() { _isLoading = false; _isFetching = false; });
         return;
       }
-      
-      // Fetch Profile (including fuel capacity)
+
+      // ── Profile ────────────────────────────────────────────────────
       final profile = await Supabase.instance.client
           .from('drivers')
-          .select('*, current_fuel_capacity') // Explicitly select the new column
+          .select('*, current_fuel_capacity')
           .eq('id', user.id)
           .maybeSingle();
 
-      if (profile != null && mounted) {
+      // Bail if this request has been superseded
+      if (myToken != _fetchToken || !mounted) return;
+
+      if (profile != null) {
         setState(() {
           _driverName = profile['full_name'] ?? 'Driver';
-          
-          String vType = (profile['vehicle_type'] ?? '').toString().trim();
+          final vType = (profile['vehicle_type'] ?? '').toString().trim();
           _truckId = vType.isEmpty ? 'Fuel Tanker - 01' : vType;
-          
           _isOnline = profile['status'] == 'online';
           _profileImageUrl = profile['avatar_url'];
-          
         });
 
-        // ── Dynamic Fuel Calculation ──
+        // ── Dynamic Fuel Calculation ──────────────────────────────────
         final now = DateTime.now();
         final startOfDay = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
-        
+
         try {
           final completedOrders = await Supabase.instance.client
               .from('orders')
@@ -77,26 +131,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
               .inFilter('status', ['completed', 'delivered'])
               .gte('completed_at', startOfDay);
 
+          if (myToken != _fetchToken || !mounted) return;
+
           final int completedToday = (completedOrders as List).length;
-          double calculatedFuel = _maxFuelCapacity - (completedToday * 10.0);
-          
-          if (mounted) {
-            setState(() {
-              _currentFuel = calculatedFuel < 0 ? 0 : calculatedFuel;
-              _isFuelLoading = false;
-            });
-          }
+          final double calculatedFuel = _maxFuelCapacity - (completedToday * 10.0);
+          setState(() {
+            _currentFuel = calculatedFuel < 0 ? 0 : calculatedFuel;
+            _isFuelLoading = false;
+          });
         } catch (e) {
-          debugPrint('Error calculating fuel: $e');
-          if (mounted) {
+          debugPrint('[Dashboard] Error calculating fuel: $e');
+          if (myToken == _fetchToken && mounted) {
             setState(() {
-              _currentFuel = _maxFuelCapacity; // Fallback to full
+              _currentFuel = _maxFuelCapacity;
               _isFuelLoading = false;
             });
           }
         }
 
-        // Trigger Welcome Notification ONCE per app session (not on every tab switch)
+        // Welcome notification — once per session
         if (!_welcomeShown) {
           _welcomeShown = true;
           NotificationService.showImmediateNotification(
@@ -106,7 +159,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         }
       } else if (mounted) {
-
         setState(() {
           _driverName = user.email?.split('@')[0] ?? 'Driver Team';
           _truckId = 'Fuel Tanker - 01';
@@ -114,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
 
-      // Fetch Active Order only if driver is online
+      // ── Active Order ───────────────────────────────────────────────
       if (_isOnline) {
         Map<String, dynamic>? order = await Supabase.instance.client
             .from('orders')
@@ -124,10 +176,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .limit(1)
             .maybeSingle();
 
-        // Enrich order with customer info from profiles table
+        if (myToken != _fetchToken || !mounted) return;
+
+        // Enrich with customer info if missing
         if (order != null) {
-          final hasName = order['customer_name'] != null &&
-              order['customer_name'].toString().trim().isNotEmpty;
+          final hasName = (order['customer_name'] ?? '').toString().trim().isNotEmpty;
           if (!hasName) {
             final userId = order['user_id']?.toString();
             if (userId != null && userId.isNotEmpty) {
@@ -137,6 +190,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     .select('full_name, phone_number, avatar_url')
                     .eq('id', userId)
                     .maybeSingle();
+                if (myToken != _fetchToken || !mounted) return;
                 if (profileData != null) {
                   order = {
                     ...order,
@@ -146,20 +200,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   };
                 }
               } catch (e) {
-                debugPrint('Error fetching customer profile: $e');
+                debugPrint('[Dashboard] Error fetching customer profile: $e');
               }
             }
           }
         }
 
-        if (mounted) {
+        if (myToken == _fetchToken && mounted) {
           setState(() {
             _activeOrder = order;
             _isLoading = false;
           });
         }
       } else {
-        if (mounted) {
+        if (myToken == _fetchToken && mounted) {
           setState(() {
             _activeOrder = null;
             _isLoading = false;
@@ -167,16 +221,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     } catch (e) {
-      if (mounted) {
+      debugPrint('[Dashboard] Error fetching dashboard data: $e');
+      if (myToken == _fetchToken && mounted) {
         setState(() => _isLoading = false);
       }
-      debugPrint("Error fetching dashboard data: $e");
+    } finally {
+      // Only clear the guard if this is still the active request
+      if (myToken == _fetchToken) {
+        _isFetching = false;
+        _watchdogTimer?.cancel();
+      }
     }
   }
 
   Future<void> _triggerEmergency() async {
     if (_activeOrder == null) return;
-    
+
     final orderId = _activeOrder!['id'].toString();
     final customerUserId = _activeOrder!['user_id']?.toString();
 
@@ -185,11 +245,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .from('orders')
           .update({'status': 'emergency'})
           .eq('id', orderId);
-          
+
       if (customerUserId != null && customerUserId.isNotEmpty) {
         NotificationService.notifyUserEmergency(customerUserId, orderId);
       }
-          
+
       if (mounted) {
         setState(() => _activeOrder = null);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -199,7 +259,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       }
-      _fetchDashboardData();
+      // Debounced re-fetch — won't overlap with itself
+      _scheduleFetch();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -210,6 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _toggleStatus(bool value) async {
+    // Optimistic update so the switch feels instant
     setState(() => _isOnline = value);
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -219,12 +281,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .update({'status': value ? 'online' : 'offline'})
             .eq('id', user.id);
       }
-      // Re-fetch data when status changes (to show/hide orders)
-      _fetchDashboardData();
+      // Use debounced fetch — prevents double-fire when toggle causes rapid state changes
+      _scheduleFetch();
     } catch (e) {
-      // Revert if error
       if (mounted) {
-        setState(() => _isOnline = !value);
+        setState(() => _isOnline = !value); // Revert optimistic update
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to update status. Please check your connection.')),
         );
@@ -592,9 +653,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 deliveryLat,
                                 deliveryLng,
                               );
-                              final distText = distMeters > 1000
-                                  ? '${(distMeters / 1000).toStringAsFixed(1)} km away'
-                                  : '${distMeters.toStringAsFixed(0)} m away';
+                              final distText = distMeters > 0
+                                  ? '${(distMeters / 1609.34).toStringAsFixed(1)} miles away'
+                                  : '0.0 miles away';
                               return Container(
                                 margin: const EdgeInsets.only(top: 4),
                                 child: Text(

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'order_tracking_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 
 class OrderSummaryScreen extends StatelessWidget {
-  const OrderSummaryScreen({super.key});
+  final DateTime? scheduledDateTime;
+  const OrderSummaryScreen({super.key, this.scheduledDateTime});
 
   @override
   Widget build(BuildContext context) {
@@ -81,8 +84,10 @@ class OrderSummaryScreen extends StatelessWidget {
                 _buildDeliveryInfoRow(
                   icon: Icons.access_time_outlined,
                   title: 'Scheduled Time',
-                  value: 'Invalid Date', // Matching screenshot literally or should I fix it? Screenshot says Invalid Date.
-                  valueColor: Colors.red,
+                  value: scheduledDateTime != null 
+                      ? DateFormat('EEE MMM dd, yyyy · hh:mm a').format(scheduledDateTime!)
+                      : 'Not Scheduled',
+                  valueColor: scheduledDateTime != null ? const Color(0xFF333333) : Colors.red,
                 ),
               ],
             ),
@@ -188,10 +193,54 @@ class OrderSummaryScreen extends StatelessWidget {
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const OrderTrackingScreen()),
-              );
+            onPressed: () async {
+              final user = Supabase.instance.client.auth.currentUser;
+              if (user == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please log in to place an order')),
+                );
+                return;
+              }
+
+              // Implementation of saving to Supabase
+              try {
+                final orderData = {
+                  'customer_id': user.id,
+                  'fuel_type': 'Regular',
+                  'fuel_quantity': 15.0,
+                  'total_amount': 52.35,
+                  'status': 'assigned', // For demo purposes, auto-assigning
+                  'scheduled_time': scheduledDateTime?.toIso8601String(),
+                  'delivery_address': '123 Main Street, San Francisco, CA 94102',
+                  'created_at': DateTime.now().toIso8601String(),
+                };
+
+                final response = await Supabase.instance.client
+                    .from('orders')
+                    .insert(orderData)
+                    .select()
+                    .single();
+
+                if (context.mounted) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => OrderTrackingScreen(
+                        order: response,
+                        deliveryLat: 37.7749, // Dummy for demo
+                        deliveryLng: -122.4194,
+                        deliveryAddress: orderData['delivery_address'] as String?,
+                        fuelInfo: 'Regular · 15 Gallons',
+                      ),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error placing order: $e')),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF6600),

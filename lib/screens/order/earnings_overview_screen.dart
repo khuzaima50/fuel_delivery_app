@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'earnings_history_screen.dart';
+import 'order_details_screen.dart';
 
 class EarningsOverviewScreen extends StatefulWidget {
   const EarningsOverviewScreen({super.key});
@@ -573,85 +574,94 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
       }
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => OrderDetailsScreen(order: order),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFE8DD),
-              borderRadius: BorderRadius.circular(12),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: const Icon(
-              Icons.local_shipping_rounded,
-              color: Color(0xFFFF4D00),
-              size: 24,
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFE8DD),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.local_shipping_rounded,
+                color: Color(0xFFFF4D00),
+                size: 24,
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text(
+                    '$fuelType ($fuelQuantity Gal)',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F1F1F),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    dateStr,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF888888),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                 Text(
-                  '$fuelType ($fuelQuantity Gal)',
+                Text(
+                  '\$${amount.toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  dateStr,
-                  style: const TextStyle(
+                const Text(
+                  'Completed',
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF888888),
-                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF00C853),
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '\$${amount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1F1F1F),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Completed',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF00C853),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

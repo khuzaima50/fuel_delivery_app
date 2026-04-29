@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'select_location_screen.dart';
 
 class PaymentDetailsScreen extends StatefulWidget {
-  const PaymentDetailsScreen({super.key});
+  final DateTime? scheduledDateTime;
+  const PaymentDetailsScreen({super.key, this.scheduledDateTime});
 
   @override
   State<PaymentDetailsScreen> createState() => _PaymentDetailsScreenState();
@@ -247,7 +248,11 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const SelectLocationScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => SelectLocationScreen(
+                          scheduledDateTime: widget.scheduledDateTime,
+                        ),
+                      ),
                     );
                   },
                   style: ElevatedButton.styleFrom(

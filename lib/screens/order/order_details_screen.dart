@@ -1,7 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../services/notification_service.dart';
 import '../chat/chat_screen.dart';
 import 'delivery_navigation_screen.dart';
@@ -19,6 +24,13 @@ class OrderDetailsScreen extends StatefulWidget {
 class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   late String _customerName;
   late String _customerPhone;
+  
+  // Map State
+  GoogleMapController? _mapController;
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
+  bool _isLoadingRoute = false;
+  final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
 
   @override
   void initState() {
@@ -29,11 +41,125 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         : 'Loading...';
     _customerPhone = widget.order['customer_phone'] ?? '';
     _resolveCustomerInfo();
-    // Always re-fetch fresh data for delivered/completed orders to ensure
-    // amount, timestamps and status are not stale from the list cache.
+    
     final rawStatus = widget.order['status']?.toString().toLowerCase() ?? '';
     if (rawStatus == 'delivered' || rawStatus == 'completed') {
       _refreshOrderFromDb();
+    } else if (rawStatus != 'cancelled' && rawStatus != 'pending' && rawStatus != 'available') {
+      // For active orders, fetch the route once we have current position
+      _initActiveOrderTracking();
+    }
+  }
+
+  Future<void> _initActiveOrderTracking() async {
+    try {
+      final position = await Geolocator.getCurrentPosition();
+      _fetchRoute(position);
+    } catch (e) {
+      debugPrint('Error getting position for route: $e');
+    }
+  }
+
+  List<LatLng> _decodePolyline(String encoded) {
+    final List<LatLng> points = [];
+    int index = 0;
+    final int len = encoded.length;
+    int lat = 0, lng = 0;
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dLat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dLat;
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dLng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dLng;
+      points.add(LatLng(lat / 1e5, lng / 1e5));
+    }
+    return points;
+  }
+
+  Future<void> _fetchRoute(Position driverPos) async {
+    final double? dLat = double.tryParse(
+        (widget.order['customer_lat'] ?? widget.order['delivery_lat'])?.toString() ?? '');
+    final double? dLng = double.tryParse(
+        (widget.order['customer_lng'] ?? widget.order['delivery_lng'])?.toString() ?? '');
+
+    if (dLat == null || dLng == null || _apiKey.isEmpty) return;
+    if (_isLoadingRoute) return;
+
+    if (mounted) setState(() => _isLoadingRoute = true);
+
+    try {
+      final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/directions/json'
+        '?origin=${driverPos.latitude},${driverPos.longitude}'
+        '&destination=$dLat,$dLng'
+        '&mode=driving'
+        '&key=$_apiKey',
+      );
+
+      final response = await http.get(uri);
+      if (!mounted) return;
+
+      final data = jsonDecode(response.body);
+      if (data['status'] == 'OK') {
+        final routes = data['routes'] as List;
+        if (routes.isNotEmpty) {
+          final points = routes[0]['overview_polyline']['points'];
+          final decoded = _decodePolyline(points);
+          
+          setState(() {
+            _polylines.add(Polyline(
+              polylineId: const PolylineId('route'),
+              points: decoded,
+              color: const Color(0xFFFF4D00),
+              width: 5,
+            ));
+            
+            _markers.add(Marker(
+              markerId: const MarkerId('driver'),
+              position: LatLng(driverPos.latitude, driverPos.longitude),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+            ));
+            
+            _markers.add(Marker(
+              markerId: const MarkerId('destination'),
+              position: LatLng(dLat, dLng),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            ));
+            
+            _isLoadingRoute = false;
+          });
+
+          // Fit bounds
+          if (_mapController != null) {
+            final bounds = LatLngBounds(
+              southwest: LatLng(
+                driverPos.latitude < dLat ? driverPos.latitude : dLat,
+                driverPos.longitude < dLng ? driverPos.longitude : dLng,
+              ),
+              northeast: LatLng(
+                driverPos.latitude > dLat ? driverPos.latitude : dLat,
+                driverPos.longitude > dLng ? driverPos.longitude : dLng,
+              ),
+            );
+            _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching route in details: $e');
+      if (mounted) setState(() => _isLoadingRoute = false);
     }
   }
 
@@ -129,18 +255,20 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ? double.tryParse(order['customer_rating'].toString())
         : null;
 
-    // Check multiple possible keys for the order amount.
-    // driver_earning is always written at completion; fall back through other keys.
-    final rawAmount = order['driver_earning'] ??
-        order['total_amount'] ??
-        order['total_price'] ??
-        order['price'] ??
-        order['amount'];
+    final bool isDelivered = status == 'DELIVERED' || status == 'COMPLETED';
+
+    // Prioritize requested amount for active orders, and final earnings for completed ones
+    final rawAmount = (isDelivered) 
+        ? (order['driver_earning'] ?? order['total_amount'])
+        : order['total_amount'];
+        
     final double amountVal = rawAmount != null
         ? (double.tryParse(rawAmount.toString()) ?? 0.0)
         : 0.0;
     final String amount = amountVal > 0 ? amountVal.toStringAsFixed(2) : '0.00';
-    final bool isDelivered = status == 'DELIVERED' || status == 'COMPLETED';
+
+    final scheduledTime = order['scheduled_time'];
+    final dropOffNotes = (order['drop_off_instructions'] ?? order['notes'])?.toString() ?? '';
     
     // Helper to format timeline dates (MMM dd, hh:mm a)
     String formatTimelineDate(String? isoString) {
@@ -195,7 +323,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               status,
               style: TextStyle(
                 color: (status == 'COMPLETED' || status == 'DELIVERED') ? Colors.green : const Color(0xFFFF4D00),
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.5,
               ),
@@ -204,12 +332,12 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         ),
         centerTitle: true,
         actions: [
-          if (!(status == 'COMPLETED' || status == 'DELIVERED'))
+          if (!(status == 'DELIVERED' || status == 'COMPLETED' || status == 'CANCELLED'))
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: widget.order['status'] == 'emergency' ? const Color(0xFFFF4D00) : Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -219,13 +347,61 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   ],
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.phone, color: Colors.blueAccent, size: 20),
-                  onPressed: () {
-                    _makePhoneCall(context, _customerPhone);
+                  icon: Icon(
+                    Icons.report_problem_rounded,
+                    color: widget.order['status'] == 'emergency' ? Colors.white : Colors.redAccent,
+                    size: 20,
+                  ),
+                  tooltip: 'Flag as Emergency',
+                  onPressed: () async {
+                    final newStatus = widget.order['status'] == 'emergency' ? 'assigned' : 'emergency';
+                    try {
+                      await Supabase.instance.client.from('orders').update({
+                        'status': newStatus,
+                      }).eq('id', order['id']);
+                      
+                      setState(() {
+                        widget.order['status'] = newStatus;
+                      });
+                      
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(newStatus == 'emergency' ? 'Order flagged as Emergency! 🚨' : 'Order moved back to Assigned.'),
+                            backgroundColor: newStatus == 'emergency' ? Colors.redAccent : Colors.grey[800],
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
                   },
                 ),
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.phone, color: Colors.blueAccent, size: 20),
+                onPressed: () {
+                  _makePhoneCall(context, _customerPhone);
+                },
+              ),
+            ),
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -355,11 +531,18 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               
               // Total Expected Earnings or Cost
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFF2F2F2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -368,23 +551,19 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       'ORDER TOTAL',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         color: Color(0xFF888888),
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.8,
                       ),
                     ),
                     Text(
-                      // For delivered/completed orders: never show 'Pending'.
-                      // Show the amount if available, otherwise 'Completed ✓'.
                       isDelivered
                           ? (amountVal > 0 ? '\$$amount' : 'Completed ✓')
                           : (amountVal > 0 ? '\$$amount' : 'Pending'),
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: isDelivered
-                            ? (amountVal > 0 ? const Color(0xFFFF4D00) : Colors.green)
-                            : (amountVal > 0 ? const Color(0xFFFF4D00) : const Color(0xFF888888)),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFFFF4D00),
                       ),
                     ),
                   ],
@@ -392,9 +571,114 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ),
 
               const SizedBox(height: 20),
-              // Delivery Location Card
+              // Scheduled Delivery Section (High Visibility)
+              if (scheduledTime != null)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0F7FF), // Subtle blue tint
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFD0E3FF)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.schedule_rounded,
+                          color: Color(0xFF2F80ED),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'SCHEDULED DELIVERY',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2F80ED),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              DateFormat('EEE, MMM dd · h:mm a').format(
+                                DateTime.parse(scheduledTime.toString()).toLocal()
+                              ),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1F1F1F),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Drop-off Instructions (Conditional)
+              if (dropOffNotes.trim().isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF9F5), // Subtle orange tint
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFFE8DD)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.note_alt_rounded,
+                            color: Color(0xFFFF4D00),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'DROP-OFF INSTRUCTIONS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFFF4D00),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        dropOffNotes,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF555555),
+                          fontWeight: FontWeight.w600,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 0), // Adjust spacing
+              // Delivery Location Card or Map
               Container(
-                padding: const EdgeInsets.all(16),
+                width: double.infinity,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -403,83 +687,122 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'DELIVERY LOCATION',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF888888),
-                            letterSpacing: 0.5,
+                    // Map Section for Active Orders
+                    if (!(status == 'COMPLETED' || status == 'DELIVERED' || status == 'CANCELLED'))
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                        child: SizedBox(
+                          height: 180,
+                          child: Stack(
+                            children: [
+                              GoogleMap(
+                                initialCameraPosition: CameraPosition(
+                                  target: LatLng(
+                                    double.tryParse((order['customer_lat'] ?? order['delivery_lat'] ?? 0).toString()) ?? 0,
+                                    double.tryParse((order['customer_lng'] ?? order['delivery_lng'] ?? 0).toString()) ?? 0,
+                                  ),
+                                  zoom: 14,
+                                ),
+                                onMapCreated: (c) => _mapController = c,
+                                markers: _markers,
+                                polylines: _polylines,
+                                myLocationEnabled: true,
+                                myLocationButtonEnabled: false,
+                                zoomControlsEnabled: false,
+                                mapToolbarEnabled: false,
+                              ),
+                              if (_isLoadingRoute)
+                                const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D00))),
+                            ],
                           ),
                         ),
-                        if (!(status == 'COMPLETED' || status == 'DELIVERED'))
-                          GestureDetector(
-                            onTap: () async {
-                              // Extract real customer coordinates
-                              double? lat = double.tryParse(
-                                  (order['customer_lat'] ?? order['delivery_lat'])?.toString() ?? '');
-                              double? lng = double.tryParse(
-                                  (order['customer_lng'] ?? order['delivery_lng'])?.toString() ?? '');
-                              if (lat == 0.0) lat = null;
-                              if (lng == 0.0) lng = null;
+                      ),
+                    
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'DELIVERY LOCATION',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF888888),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              if (!(status == 'COMPLETED' || status == 'DELIVERED'))
+                                GestureDetector(
+                                  onTap: () async {
+                                    // Extract real customer coordinates
+                                    double? lat = double.tryParse(
+                                        (order['customer_lat'] ?? order['delivery_lat'])?.toString() ?? '');
+                                    double? lng = double.tryParse(
+                                        (order['customer_lng'] ?? order['delivery_lng'])?.toString() ?? '');
+                                    if (lat == 0.0) lat = null;
+                                    if (lng == 0.0) lng = null;
 
-                              // Try to open in Google Maps first if coordinates exist
-                              if (lat != null && lng != null) {
-                                final mapUrl = Uri.parse(
-                                  'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-                                );
-                                if (await canLaunchUrl(mapUrl)) {
-                                  await launchUrl(mapUrl, mode: LaunchMode.externalApplication);
-                                  return;
-                                }
-                              }
+                                    // Try to open in Google Maps first if coordinates exist
+                                    if (lat != null && lng != null) {
+                                      final mapUrl = Uri.parse(
+                                        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+                                      );
+                                      if (await canLaunchUrl(mapUrl)) {
+                                        await launchUrl(mapUrl, mode: LaunchMode.externalApplication);
+                                        return;
+                                      }
+                                    }
 
-                              // Fallback: open the in-app DeliveryNavigationScreen
-                              if (status == 'ACCEPTED' || status == 'ASSIGNED') {
-                                await Supabase.instance.client.from('orders').update({
-                                  'status': 'in_progress',
-                                  'accepted_at': DateTime.now().toUtc().toIso8601String(),
-                                  'driver_id': Supabase.instance.client.auth.currentUser?.id,
-                                }).eq('id', order['id']);
-                                widget.order['status'] = 'in_progress';
-                                if (context.mounted) {
-                                  Navigator.of(context).push(MaterialPageRoute(
-                                      builder: (c) => DeliveryNavigationScreen(order: order)));
-                                }
-                              }
-                            },
-                            child: Row(
-                              children: const [
-                                Text(
-                                  'Navigate',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFFFF4D00),
+                                    // Fallback: open the in-app DeliveryNavigationScreen
+                                    if (status == 'ACCEPTED' || status == 'ASSIGNED') {
+                                      await Supabase.instance.client.from('orders').update({
+                                        'status': 'in_progress',
+                                        'accepted_at': DateTime.now().toUtc().toIso8601String(),
+                                        'driver_id': Supabase.instance.client.auth.currentUser?.id,
+                                      }).eq('id', order['id']);
+                                      widget.order['status'] = 'in_progress';
+                                      if (context.mounted) {
+                                        Navigator.of(context).push(MaterialPageRoute(
+                                            builder: (c) => DeliveryNavigationScreen(order: order)));
+                                      }
+                                    }
+                                  },
+                                  child: Row(
+                                    children: const [
+                                      Text(
+                                        'Navigate',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFFFF4D00),
+                                        ),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Icon(
+                                        Icons.explore,
+                                        color: Color(0xFFFF4D00),
+                                        size: 16,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                SizedBox(width: 4),
-                                Icon(
-                                  Icons.explore,
-                                  color: Color(0xFFFF4D00),
-                                  size: 16,
-                                ),
-                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            address,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF555555),
+                              fontWeight: FontWeight.w500,
+                              height: 1.5,
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      address,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF555555),
-                        fontWeight: FontWeight.w500,
-                        height: 1.5,
+                        ],
                       ),
                     ),
                   ],
@@ -550,8 +873,37 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   height: 58,
                   child: ElevatedButton(
                     onPressed: () async {
+                      // Check if scheduled order is too early ( > 1 hour from now)
+                      final sTime = order['scheduled_time'];
+                      if (sTime != null) {
+                        try {
+                          final scheduledDate = DateTime.parse(sTime.toString()).toUtc();
+                          final now = DateTime.now().toUtc();
+                          final diff = scheduledDate.difference(now);
+                          
+                          if (diff.inMinutes > 60) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text(
+                                    "This order is scheduled for later. You can only start it 1 hour before the scheduled time.",
+                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                  backgroundColor: const Color(0xFFFF4D00),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              );
+                            }
+                            return; // Stop execution
+                          }
+                        } catch (e) {
+                          debugPrint('Error parsing scheduled time for validation: $e');
+                        }
+                      }
+
                       // Update order status to in_progress / en route
-                      if (order['status'] == 'accepted') {
+                      if (order['status'] == 'accepted' || order['status'] == 'assigned') {
                         await Supabase.instance.client.from('orders').update({
                           'status': 'in_progress',
                           'accepted_at': DateTime.now().toUtc().toIso8601String(),

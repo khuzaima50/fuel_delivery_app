@@ -317,9 +317,29 @@ class _ScheduleDeliveryScreenState extends State<ScheduleDeliveryScreen> {
           child: ElevatedButton(
             onPressed: isContinueEnabled
                 ? () {
+                    final slot = _timeSlots[_selectedTimeIndex];
+                    final timeStr = slot['time'].split(' - ')[0].replaceAll('\n', ' ');
+                    // Simple parsing for "8:00 AM" etc
+                    final parts = timeStr.split(' ');
+                    final timeParts = parts[0].split(':');
+                    int hour = int.parse(timeParts[0]);
+                    final int minute = int.parse(timeParts[1]);
+                    if (parts[1] == 'PM' && hour < 12) hour += 12;
+                    if (parts[1] == 'AM' && hour == 12) hour = 0;
+
+                    final scheduledDateTime = DateTime(
+                      _selectedDate.year,
+                      _selectedDate.month,
+                      _selectedDate.day,
+                      hour,
+                      minute,
+                    );
+
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const PaymentDetailsScreen(),
+                        builder: (context) => PaymentDetailsScreen(
+                          scheduledDateTime: scheduledDateTime,
+                        ),
                       ),
                     );
                   }

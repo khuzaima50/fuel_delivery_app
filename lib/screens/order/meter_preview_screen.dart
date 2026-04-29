@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'safety_compliance_screen.dart';
+
 
 
 class MeterPreviewScreen extends StatefulWidget {
@@ -39,15 +39,7 @@ class _MeterPreviewScreenState extends State<MeterPreviewScreen> {
           .getPublicUrl(filePath);
 
       if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => SafetyComplianceScreen(
-              meterPhotoUrl: publicUrl,
-              deliveredGallons: widget.deliveredGallons,
-              order: widget.order,
-            ),
-          ),
-        );
+        Navigator.of(context).pop(publicUrl);
       }
     } catch (e) {
       if (mounted) {

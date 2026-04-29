@@ -3,7 +3,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'order_summary_screen.dart';
 
 class SelectLocationScreen extends StatefulWidget {
-  const SelectLocationScreen({super.key});
+  final DateTime? scheduledDateTime;
+  const SelectLocationScreen({super.key, this.scheduledDateTime});
 
   @override
   State<SelectLocationScreen> createState() => _SelectLocationScreenState();
@@ -470,7 +471,11 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.of(context).push(
-                          MaterialPageRoute(builder: (context) => const OrderSummaryScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => OrderSummaryScreen(
+                              scheduledDateTime: widget.scheduledDateTime,
+                            ),
+                          ),
                         );
                       },
                       style: ElevatedButton.styleFrom(

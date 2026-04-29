@@ -18,6 +18,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   final List<String> _filters = [
     'Available',
     'Assigned',
+    'Scheduled',
     'Emergency',
     'Delivered',
   ];
@@ -173,25 +174,37 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         throw Exception("Order is no longer available.");
       }
 
-      // ─ Optimistic local update: instantly move to Assigned tab ─
-      // The realtime event will confirm, but UI reacts immediately.
-      final now = DateTime.now().toUtc().toIso8601String();
+      // ─ Optimistic local update: instantly move to correct tab ─
+      final nowTs = DateTime.now().toUtc();
+      int targetTab = 1; // Default to Assigned
+      
       setState(() {
         final idx = _orders.indexWhere((o) => o['id'] == orderId);
         if (idx != -1) {
-          _orders[idx] = Map<String, dynamic>.from(_orders[idx])
+          final order = _orders[idx];
+          final sTime = order['scheduled_time'];
+          if (sTime != null && sTime.toString().trim().isNotEmpty) {
+            try {
+              final scheduledDate = DateTime.parse(sTime.toString()).toUtc();
+              if (scheduledDate.difference(nowTs).inMinutes > 60) {
+                targetTab = 2; // Move to Scheduled tab
+              }
+            } catch (_) {}
+          }
+
+          _orders[idx] = Map<String, dynamic>.from(order)
             ..['status'] = 'assigned'
             ..['driver_id'] = user.id
-            ..['assigned_at'] = now;
+            ..['assigned_at'] = nowTs.toIso8601String();
         }
-        _activeFilterIndex = 1; // Switch to Assigned tab
+        _activeFilterIndex = targetTab;
       });
 
       // Commit to DB
       await Supabase.instance.client.from('orders').update({
         'status': 'assigned',
         'driver_id': user.id,
-        'assigned_at': now,
+        'assigned_at': nowTs.toIso8601String(),
       }).eq('id', orderId);
 
       // Notify the customer (fire-and-forget)
@@ -417,37 +430,81 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
           (driverId == null || driverId == '');
 
       if (_activeFilterIndex == 0) return isAvailableStatus();
+      
       if (_activeFilterIndex == 1) {
-        return (status == 'assigned' || status == 'accepted' ||
-                status == 'in_progress' || status == 'driver_arrived' ||
-                status == 'on_the_way') &&
-            driverId == myId;
+        // Assigned: Active orders (accepted/assigned/in_progress) 
+        // AND (Immediate OR Scheduled within 1 hour)
+        if (driverId != myId) return false;
+        if (status == 'delivered' || status == 'completed' || status == 'cancelled' || status == 'emergency') return false;
+        
+        final sTime = o['scheduled_time'];
+        if (sTime == null || sTime.toString().trim().isEmpty) return true; // Immediate
+        
+        try {
+          final scheduledDate = DateTime.parse(sTime.toString()).toUtc();
+          final diff = scheduledDate.difference(now);
+          // Show in Assigned if it's within 1 hour OR in the past (already due)
+          return diff.inMinutes <= 60; 
+        } catch (_) {
+          return true; // Fallback to immediate
+        }
       }
-      if (_activeFilterIndex == 2) return status == 'emergency' && driverId == myId;
-      if (_activeFilterIndex == 3) {
-        // Only show delivered/completed orders from the last 24 hours
-        if (!((status == 'delivered' || status == 'completed') && driverId == myId)) {
+
+      if (_activeFilterIndex == 2) {
+        // Scheduled: Future orders (> 1 hour away)
+        if (driverId != myId) return false;
+        if (status == 'delivered' || status == 'completed' || status == 'cancelled') return false;
+
+        final sTime = o['scheduled_time'];
+        if (sTime == null) return false;
+
+        try {
+          final scheduledDate = DateTime.parse(sTime.toString()).toUtc();
+          final diff = scheduledDate.difference(now);
+          return diff.inMinutes > 60;
+        } catch (_) {
           return false;
         }
-        // 24-hour filter: use delivered_at first, fall back to completed_at
+      }
+
+      if (_activeFilterIndex == 3) {
+        // Emergency: Orders manually flagged or categorized as emergency
+        if (driverId != myId) return false;
+        return status == 'emergency';
+      }
+
+      if (_activeFilterIndex == 4) {
+        // Delivered: Completed orders from last 24h
+        if (driverId != myId) return false;
+        if (!(status == 'delivered' || status == 'completed')) return false;
+        
         final rawTs = o['delivered_at'] ?? o['completed_at'];
-        if (rawTs == null) return true; // no timestamp → include (just completed)
+        if (rawTs == null) return true;
         try {
           final ts = DateTime.parse(rawTs.toString()).toUtc();
           return ts.isAfter(cutoff24h);
         } catch (_) {
-          return true; // unparseable → include
+          return true;
         }
       }
       return false;
     }).toList();
 
     // Sort Delivered tab by delivered_at DESC so the latest completed order is on top.
-    if (_activeFilterIndex == 3) {
+    if (_activeFilterIndex == 4) {
       filteredOrders.sort((a, b) {
         DateTime tsA = _parseTs(a['delivered_at'] ?? a['completed_at'] ?? a['created_at']);
         DateTime tsB = _parseTs(b['delivered_at'] ?? b['completed_at'] ?? b['created_at']);
         return tsB.compareTo(tsA); // descending: newest first
+      });
+    }
+
+    // Sort Scheduled tab by scheduled_time ASC so the soonest appointment is on top.
+    if (_activeFilterIndex == 2) {
+      filteredOrders.sort((a, b) {
+        DateTime tsA = _parseTs(a['scheduled_time']);
+        DateTime tsB = _parseTs(b['scheduled_time']);
+        return tsA.compareTo(tsB); // ascending: soonest first
       });
     }
 
@@ -478,8 +535,35 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             (order['driver_id'] == null || order['driver_id'] == '');
 
         String formattedTime = '--:--';
-        if (isAvailable) {
-          formattedTime = 'NEW';
+        final schTime = order['scheduled_time'];
+        final hasValidSchedule = schTime != null && schTime.toString().trim().isNotEmpty;
+
+        if (hasValidSchedule && !isAvailable) {
+          try {
+            final parsedTime = DateTime.parse(schTime.toString()).toLocal();
+            final int hour = parsedTime.hour;
+            final int min = parsedTime.minute;
+            final String ampm = hour >= 12 ? 'PM' : 'AM';
+            final int displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+            formattedTime = 'SCHED: ${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm';
+          } catch (_) {
+            formattedTime = 'SCHED';
+          }
+        } else if (isAvailable) {
+          if (hasValidSchedule) {
+             try {
+                final parsedTime = DateTime.parse(schTime.toString()).toLocal();
+                final int hour = parsedTime.hour;
+                final int min = parsedTime.minute;
+                final String ampm = hour >= 12 ? 'PM' : 'AM';
+                final int displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+                formattedTime = 'SCHED: ${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm';
+              } catch (_) {
+                formattedTime = 'NEW';
+              }
+          } else {
+            formattedTime = 'NEW';
+          }
         } else {
           // For delivered orders, prefer delivered_at; otherwise use assigned/accepted/created
           final statusLowForTime = order['status']?.toString().toLowerCase() ?? '';
@@ -530,196 +614,222 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     // Generate a short ID string like "#ORD-A8B2"
     final shortId = '#ORD-${id.substring(0, 4).toUpperCase()}';
     
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF2F2F2)),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            top: 16,
-            bottom: 16,
-            child: Container(width: 3, color: const Color(0xFFFF4D00)),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => OrderDetailsScreen(order: fullDataMap),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      shortId,
-                      style: const TextStyle(
-                        color: Color(0xFFFF4D00),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFF2F2F2)),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 16,
+              bottom: 16,
+              child: Container(width: 3, color: const Color(0xFFFF4D00)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Text(
+                              shortId,
+                              style: const TextStyle(
+                                color: Color(0xFFFF4D00),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: tagColor,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  tag,
+                                  style: TextStyle(
+                                    color: isEmergency || tag == 'AVAILABLE'
+                                        ? const Color(0xFFFF4D00)
+                                        : const Color(0xFF888888),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: tagColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        tag,
-                        style: TextStyle(
-                          color: isEmergency || tag == 'AVAILABLE'
-                              ? const Color(0xFFFF4D00)
-                              : const Color(0xFF888888),
-                          fontSize: 11,
+                      const SizedBox(width: 8),
+                      Text(
+                        time,
+                        style: const TextStyle(
+                          color: Color(0xFFFF4D00),
+                          fontSize: 13,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                    ),
-                    Text(
-                      time,
-                      style: const TextStyle(
-                        color: Color(0xFFFF4D00),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  address,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1F1F1F),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      size: 14,
-                      color: Color(0xFF666666),
+                  const SizedBox(height: 12),
+                  Text(
+                    address,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F1F1F),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      distance,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF888888),
-                        fontWeight: FontWeight.w500,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: Color(0xFF666666),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Divider(height: 1, color: Color(0xFFF2F2F2)),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFE8DD),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.local_gas_station,
-                        color: Color(0xFFFF4D00),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Fuel Type',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF888888),
-                              fontWeight: FontWeight.w500,
-                            ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          distance,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF888888),
+                            fontWeight: FontWeight.w500,
                           ),
-                          Text(
-                            fuelType,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1F1F1F),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      height: 40,
-                      width: isAvailable ? 110 : (tag == 'COMPLETED' ? 110 : 130),
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (isAvailable) {
-                            _acceptOrder(id);
-                          } else {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => OrderDetailsScreen(order: fullDataMap),
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isAvailable || isEmergency
-                              ? const Color(0xFFFF4D00)
-                              : const Color(0xFFAAAAAA),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1, color: Color(0xFFF2F2F2)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFE8DD),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.local_gas_station,
+                          color: Color(0xFFFF4D00),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                              if (isAvailable) ...[
-                                const Text(
-                                  'ACCEPT',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ] else if (isEmergency) ...[
-                                const Icon(Icons.explore, size: 18),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'GO',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ] else ...[
-                                const Text(
-                                  'Details',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ],
-                            ],
-                          ),
+                            const Text(
+                              'Fuel Type',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF888888),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              fuelType,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1F1F1F),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        height: 40,
+                        width: isAvailable ? 110 : (tag == 'COMPLETED' ? 110 : 130),
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (isAvailable) {
+                              _acceptOrder(id);
+                            } else {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => OrderDetailsScreen(order: fullDataMap),
+                                ),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isAvailable || isEmergency
+                                ? const Color(0xFFFF4D00)
+                                : const Color(0xFFAAAAAA),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                                if (isAvailable) ...[
+                                  const Text(
+                                    'ACCEPT',
+                                    style: TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                                ] else if (isEmergency) ...[
+                                  const Icon(Icons.explore, size: 18),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'GO',
+                                    style: TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                                ] else ...[
+                                  const Text(
+                                    'Details',
+                                    style: TextStyle(fontWeight: FontWeight.w800),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

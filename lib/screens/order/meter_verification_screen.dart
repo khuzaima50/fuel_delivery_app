@@ -91,8 +91,7 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
       final XFile image = await _controller!.takePicture();
 
       if (!mounted) return;
-
-      await Navigator.of(context).push(
+      final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(
           builder: (context) => MeterPreviewScreen(
             imagePath: image.path,
@@ -101,6 +100,10 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
           ),
         ),
       );
+
+      if (result != null && mounted) {
+        Navigator.of(context).pop(result);
+      }
     } catch (e) {
       debugPrint('Error taking picture: $e');
       if (mounted) {

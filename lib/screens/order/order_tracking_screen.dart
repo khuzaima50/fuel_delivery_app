@@ -229,8 +229,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
       widget.deliveryLat!,
       widget.deliveryLng!,
     );
-    final km = distM / 1000.0;
-    final mins = math.max(1, (km / 30.0 * 60.0).ceil());
+    final miles = distM / 1609.34;
+    final mins = math.max(1, (miles / 18.64 * 60.0).ceil());
     final now = DateTime.now();
     final arrival = now.add(Duration(minutes: mins));
     final formatted = DateFormat('h:mm a').format(arrival);

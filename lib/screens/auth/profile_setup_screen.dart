@@ -173,27 +173,25 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         debugPrint('[Profile] Avatar uploaded → $avatarUrl');
       }
 
-      // 2. Upsert drivers table (handles the case where the signup trigger
-      //    failed to create the row — upsert creates it if missing).
-      final upsertData = <String, dynamic>{
-        'id':                   user.id,
-        'email':                user.email ?? '',
+      // 2. Update drivers table (row already exists from sign-up/login)
+      final updateData = <String, dynamic>{
         'full_name':            _nameController.text.trim(),
         'phone':                _phoneController.text.trim(),
         'is_profile_completed': true,
         'status':               'offline',
         'updated_at':           DateTime.now().toUtc().toIso8601String(),
       };
-      if (avatarUrl != null) upsertData['avatar_url'] = avatarUrl;
+      if (avatarUrl != null) updateData['avatar_url'] = avatarUrl;
 
       try {
         await Supabase.instance.client
             .from('drivers')
-            .upsert(upsertData, onConflict: 'id');
-        debugPrint('[Profile] Driver profile upserted ✓');
-      } catch (upsertErr) {
+            .update(updateData)
+            .eq('id', user.id);
+        debugPrint('[Profile] Driver profile updated ✓');
+      } catch (updateErr) {
         // Surface the exact Supabase error for debugging
-        debugPrint('[Profile] Upsert failed: $upsertErr');
+        debugPrint('[Profile] Update failed: $updateErr');
         rethrow;
       }
 

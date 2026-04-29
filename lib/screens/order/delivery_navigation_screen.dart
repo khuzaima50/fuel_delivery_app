@@ -56,7 +56,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
   bool _routeFetched = false;
 
   // ── Stats ──────────────────────────────────────────────────────────────────
-  double _distanceKm = 0.0;
+  double _distanceMiles = 0.0;
   int _estimatedMinutes = 0;
   String _etaTime = '--:--';
 
@@ -210,8 +210,8 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     if (dLat == null || dLng == null) return;
     final distM = Geolocator.distanceBetween(
         pos.latitude, pos.longitude, dLat, dLng);
-    final km = distM / 1000.0;
-    final mins = math.max(1, (km / 30.0 * 60.0).ceil());
+    final miles = distM / 1609.34;
+    final mins = math.max(1, (miles / 18.64 * 60.0).ceil());
     final arrival = DateTime.now().add(Duration(minutes: mins));
     final h = arrival.hour > 12
         ? arrival.hour - 12
@@ -220,7 +220,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     final ampm = arrival.hour >= 12 ? 'PM' : 'AM';
     if (mounted) {
       setState(() {
-        _distanceKm = km;
+        _distanceMiles = miles;
         _estimatedMinutes = mins;
         _etaTime = '$h:$m $ampm';
       });
@@ -530,8 +530,8 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                       const SizedBox(width: 12),
                       _buildStatBox(
                           'DIST',
-                          _distanceKm > 0
-                              ? '${_distanceKm.toStringAsFixed(1)} km'
+                          _distanceMiles > 0
+                              ? '${_distanceMiles.toStringAsFixed(1)} miles'
                               : '--'),
                     ],
                   ),
