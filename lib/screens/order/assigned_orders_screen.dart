@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../../services/notification_service.dart';
+import '../../services/driver_database_service.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'order_details_screen.dart';
 
@@ -14,6 +17,7 @@ class AssignedOrdersScreen extends StatefulWidget {
 }
 
 class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
+  static StreamSubscription<Position>? _backgroundLocationStream;
   int _activeFilterIndex = 0;
   final List<String> _filters = [
     'Available',
@@ -29,6 +33,11 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   String? _ordersError;
   RealtimeChannel? _ordersChannel;
 
+  // ── Driver location (for proximity filtering) ──────────────────────
+  static const double _nearbyRadiusKm = 25.0; // show orders within 25 km
+  Position? _driverPosition;
+  StreamSubscription<Position>? _locationFilterStream;
+
   // ── Driver online status ──
   StreamSubscription<List<Map<String, dynamic>>>? _driverStatusSubscription;
   bool? _isOnline;
@@ -39,13 +48,77 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     _listenToDriverStatus();
     _fetchOrders();
     _subscribeToOrderChanges();
+    _startLocationFilter();
   }
 
   @override
   void dispose() {
     _ordersChannel?.unsubscribe();
     _driverStatusSubscription?.cancel();
+    _locationFilterStream?.cancel();
     super.dispose();
+  }
+
+  // ── Location stream for proximity filtering ────────────────────────
+  Future<void> _startLocationFilter() async {
+    // Check permission without blocking the screen
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.deniedForever) return;
+
+      // Grab current position immediately for the first filter pass
+      final initial = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      if (mounted) setState(() => _driverPosition = initial);
+
+      // Then keep updating whenever the driver moves ≥ 200 m
+      _locationFilterStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          distanceFilter: 200, // metres — matches _locationUpdateFilterM
+        ),
+      ).listen((pos) {
+        debugPrint('[Proximity] Driver moved → ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}');
+        if (mounted) setState(() => _driverPosition = pos);
+      }, onError: (e) {
+        debugPrint('[Proximity] Location stream error: $e');
+      });
+    } catch (e) {
+      debugPrint('[Proximity] Could not start location stream: $e');
+    }
+  }
+
+  // ── Haversine distance (km) between two lat/lng points ────────────
+  double _distanceKm(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371.0; // Earth radius in km
+    final dLat = _toRad(lat2 - lat1);
+    final dLng = _toRad(lng2 - lng1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRad(lat1)) *
+            math.cos(_toRad(lat2)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  double _toRad(double deg) => deg * math.pi / 180;
+
+  /// Returns formatted distance string for a given order, or null if
+  /// the order has no coordinates or driver location is unknown.
+  String? _orderDistanceLabel(Map<String, dynamic> order) {
+    final dPos = _driverPosition;
+    if (dPos == null) return null;
+    final lat = double.tryParse(order['latitude']?.toString() ?? '');
+    final lng = double.tryParse(order['longitude']?.toString() ?? '');
+    if (lat == null || lng == null) return null;
+    final km = _distanceKm(dPos.latitude, dPos.longitude, lat, lng);
+    return km < 1 ? '${(km * 1000).round()} m away' : '${km.toStringAsFixed(1)} km away';
   }
 
   // ── Initial fetch ──────────────────────────────────────────────────
@@ -174,6 +247,18 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         throw Exception("Order is no longer available.");
       }
 
+      // Fetch driver details for tracking
+      final profile = await Supabase.instance.client
+          .from('drivers')
+          .select('full_name, avatar_url, vehicle_type, phone')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      final driverName = profile?['full_name'] ?? 'Driver';
+      final driverPhoto = profile?['avatar_url'] ?? '';
+      final driverVehicle = profile?['vehicle_type'] ?? 'Fuel Truck';
+      final driverPhone = profile?['phone'] ?? '';
+
       // ─ Optimistic local update: instantly move to correct tab ─
       final nowTs = DateTime.now().toUtc();
       int targetTab = 1; // Default to Assigned
@@ -195,17 +280,70 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
           _orders[idx] = Map<String, dynamic>.from(order)
             ..['status'] = 'assigned'
             ..['driver_id'] = user.id
-            ..['assigned_at'] = nowTs.toIso8601String();
+            ..['assigned_at'] = nowTs.toIso8601String()
+            ..['driver_name'] = driverName
+            ..['driver_photo'] = driverPhoto
+            ..['driver_vehicle'] = driverVehicle;
         }
         _activeFilterIndex = targetTab;
       });
 
-      // Commit to DB
-      await Supabase.instance.client.from('orders').update({
+      Position? currentPos;
+      try {
+        currentPos = await Geolocator.getCurrentPosition();
+      } catch (_) {}
+
+      final updatePayload = {
         'status': 'assigned',
         'driver_id': user.id,
         'assigned_at': nowTs.toIso8601String(),
-      }).eq('id', orderId);
+        'driver_name': driverName,
+        'driver_photo': driverPhoto,
+        'driver_vehicle': driverVehicle,
+        'driver_phone': driverPhone,
+      };
+
+      if (currentPos != null) {
+        updatePayload['driver_latitude'] = currentPos.latitude;
+        updatePayload['driver_longitude'] = currentPos.longitude;
+      }
+
+      // Commit to DB
+      await Supabase.instance.client.from('orders').update(updatePayload).eq('id', orderId);
+
+      // Log the acceptance event
+      await DriverDatabaseService.instance.logDriverAction(
+        action: 'ORDER_ACCEPTED',
+        details: {
+          'order_id': orderId,
+          'assigned_at': nowTs.toIso8601String(),
+          'driver_name': driverName,
+        },
+      );
+
+      // Start background location stream
+      _backgroundLocationStream?.cancel();
+      _backgroundLocationStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
+      ).listen((pos) async {
+        try {
+          await Supabase.instance.client.from('orders').update({
+            'driver_latitude': pos.latitude,
+            'driver_longitude': pos.longitude,
+          }).eq('id', orderId);
+          
+          await Supabase.instance.client.from('driver_locations').upsert({
+            'driver_id': user.id,
+            'latitude': pos.latitude,
+            'longitude': pos.longitude,
+            'heading': pos.heading,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          }, onConflict: 'driver_id');
+        } catch (_) {}
+      });
 
       // Notify the customer (fire-and-forget)
       final userId = orderRes['user_id']?.toString();
@@ -427,9 +565,19 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
 
       bool isAvailableStatus() =>
           (status == 'available' || status == 'pending') &&
-          (driverId == null || driverId == '');
+          driverId == null;
 
-      if (_activeFilterIndex == 0) return isAvailableStatus();
+      if (_activeFilterIndex == 0) {
+        if (!isAvailableStatus()) return false;
+        // ── Proximity filter ────────────────────────────────────────
+        final dPos = _driverPosition;
+        if (dPos == null) return true; // no location yet → show all
+        final lat = double.tryParse(o['latitude']?.toString() ?? '');
+        final lng = double.tryParse(o['longitude']?.toString() ?? '');
+        if (lat == null || lng == null) return true; // no coords → show
+        final km = _distanceKm(dPos.latitude, dPos.longitude, lat, lng);
+        return km <= _nearbyRadiusKm;
+      }
       
       if (_activeFilterIndex == 1) {
         // Assigned: Active orders (accepted/assigned/in_progress) 
@@ -513,12 +661,31 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[300]),
+            Icon(
+              _activeFilterIndex == 0
+                  ? Icons.location_searching_rounded
+                  : Icons.inbox_outlined,
+              size: 64,
+              color: Colors.grey[300],
+            ),
             const SizedBox(height: 16),
             Text(
-              'No ${_filters[_activeFilterIndex].toLowerCase()} orders yet.',
+              _activeFilterIndex == 0
+                  ? 'No nearby orders found'
+                  : 'No ${_filters[_activeFilterIndex].toLowerCase()} orders yet.',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
+            if (_activeFilterIndex == 0) ...
+              [
+                const SizedBox(height: 8),
+                Text(
+                  _driverPosition == null
+                      ? 'Waiting for GPS location…'
+                      : 'Showing orders within ${_nearbyRadiusKm.round()} km of your location.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                ),
+              ],
           ],
         ),
       );
@@ -583,11 +750,14 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
           }
         }
 
+        // Compute real distance label for the card
+        final distLabel = _orderDistanceLabel(order) ?? 'Unknown Location';
+
         return _buildOrderCard(
           id: order['id'],
           time: formattedTime,
           address: order['delivery_address'] ?? 'Unknown Location',
-          distance: 'Location Coordinates',
+          distance: distLabel,
           fuelType: '${order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? '0'} Gal ${order['fuel_type'] ?? 'Fuel'}',
           tag: isAvailable ? 'AVAILABLE' : (isEmergencyOrder ? 'EMERGENCY' : order['status']?.toString().toUpperCase() ?? 'N/A'),
           tagColor: isAvailable ? const Color(0xFFE8F5E9) : (isEmergencyOrder ? const Color(0xFFFFE8DD) : const Color(0xFFF3F3F3)),

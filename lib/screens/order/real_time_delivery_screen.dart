@@ -58,7 +58,6 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   bool _isLoadingRoute = false;
   bool _routeFetched = false;
   bool _isArrived = false;
-  bool _arrivedNotifShown = false; // guard: arrival notification fires only once per trip
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   double _distanceMiles = 0.0;
@@ -96,6 +95,35 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     _fetchCustomerData();
     _startLocationStream();
     _resolveDestination(); // async — resolves lat/lng from order
+    _checkInitialStatus();
+    _fetchRouteEarly();   // fetch route immediately without waiting for stream
+  }
+
+  /// Immediately grabs a GPS fix and draws the route —
+  /// fallback for cases where the stream hasn't emitted yet.
+  Future<void> _fetchRouteEarly() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+      if (!mounted) return;
+      // Store driver marker right away
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      _currentMarkerPos = latLng;
+      _updateDriverMarker(latLng, pos.heading);
+      // Fetch route if destination is already resolved
+      if (_destLat != null && _destLng != null && !_routeFetched) {
+        _fetchRoute(pos);
+      }
+    } catch (e) {
+      debugPrint('[RealTimeDelivery] Early GPS fix failed: $e');
+    }
+  }
+
+  void _checkInitialStatus() {
   }
 
   @override
@@ -580,47 +608,61 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   // ── Arrived button handler ────────────────────────────────────────────────
   Future<void> _onArrived() async {
     final orderId = widget.order?['id']?.toString();
-    if (orderId != null) {
+    if (orderId == null) return;
+
+    try {
+      final now = DateTime.now().toUtc().toIso8601String();
+      // 1. Update status in DB to 'arrived'
       try {
-        final now = DateTime.now().toUtc().toIso8601String();
-        // 1. Update status in DB
         await Supabase.instance.client.from('orders').update({
-          'status': 'driver_arrived',
+          'status': 'DRIVER_ARRIVED',
           'arrived_at': now,
         }).eq('id', orderId);
-
-        // 2. Update local state
-        widget.order?['status'] = 'driver_arrived';
-        widget.order?['arrived_at'] = now;
-
-        // 3. Notify Customer (via helper if desired, but trigger often handles this)
-        final userId = widget.order?['user_id']?.toString();
-        if (userId != null && userId.isNotEmpty) {
-          NotificationService.notifyUserDriverArrived(userId, orderId);
-        }
-
-        // 4. Notify Driver (Immediate feedback) — only once per trip
-        if (!_arrivedNotifShown) {
-          _arrivedNotifShown = true;
-          NotificationService.showImmediateNotification(
-            title: 'Arrived at Customer! 📍',
-            body: 'Please proceed with the safety checklist.',
-            type: 'order',
-            orderId: orderId,
-          );
-        }
-
       } catch (e) {
-        debugPrint('[RealTimeDelivery] arrived update error: $e');
+        debugPrint('[RealTimeDelivery] arrived_at update failed, falling back to status only: $e');
+        await Supabase.instance.client.from('orders').update({
+          'status': 'DRIVER_ARRIVED',
+        }).eq('id', orderId);
+      }
+
+      // 2. Update local state
+      widget.order?['status'] = 'DRIVER_ARRIVED';
+      widget.order?['arrived_at'] = now;
+
+      // 3. Notify Customer
+      final userId = widget.order?['user_id']?.toString();
+      if (userId != null && userId.isNotEmpty) {
+        NotificationService.notifyUserDriverArrived(userId, orderId);
+      }
+
+      // Mark arrival state and navigate
+      if (mounted) {
+        setState(() => _isArrived = true);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => SafetyChecklistStartingScreen(order: widget.order),
+          ),
+        );
+      }
+
+    } catch (e) {
+      debugPrint('[RealTimeDelivery] arrived update error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update arrival: $e')),
+        );
+        // Fallback navigation for testing purposes so driver is not stuck
+        setState(() => _isArrived = true);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => SafetyChecklistStartingScreen(order: widget.order),
+          ),
+        );
       }
     }
-
-    if (mounted) {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SafetyChecklistStartingScreen(order: widget.order),
-      ));
-    }
   }
+
+  // Realtime listener moved to SafetyComplianceScreen
 
   // ─────────────────────────────────────────────────────────────────────────
   @override
@@ -993,41 +1035,41 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                   ),
                   const SizedBox(height: 12),
 
-                  // ── Arrived button ───────────────────────────────────────
+                  // ── Action Button / Waiting State ────────────────────────
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: ElevatedButton(
-                      onPressed: _onArrived,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isArrived
-                            ? Colors.green.shade600
-                            : const Color(0xFFFF4D00),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        elevation: 0,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _isArrived
-                                ? Icons.check_circle_rounded
-                                : Icons.location_on_rounded,
-                            size: 20,
+                            onPressed: _onArrived,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _isArrived
+                                  ? Colors.green.shade600
+                                  : const Color(0xFFFF4D00),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _isArrived
+                                      ? Icons.check_circle_rounded
+                                      : Icons.location_on_rounded,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _isArrived
+                                      ? 'Arrived! Confirm Arrival'
+                                      : 'Arrived at Customer',
+                                  style: const TextStyle(
+                                      fontSize: 16, fontWeight: FontWeight.w800),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _isArrived
-                                ? 'Arrived! Confirm Arrival'
-                                : 'Arrived at Customer',
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -1039,6 +1081,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   }
 
   // ── Reusable widgets ──────────────────────────────────────────────────────
+
 
   Widget _circleBtn(IconData icon, VoidCallback onTap, {double size = 20}) {
     return GestureDetector(

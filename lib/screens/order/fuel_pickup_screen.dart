@@ -62,7 +62,7 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
         await Supabase.instance.client.from('orders').update({
           'tank_seal_number': sealNum,
           'pickup_at': DateTime.now().toUtc().toIso8601String(),
-          'status': 'in_progress',
+          'status': 'IN_PROGRESS',
         }).eq('id', orderId);
       }
 

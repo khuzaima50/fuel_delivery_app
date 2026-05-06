@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/notification_service.dart';
 import 'services/app_globals.dart';
+import 'widgets/app_lifecycle_manager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/onboarding/splash_screen.dart';
@@ -38,7 +39,7 @@ void main() async {
     debugPrint("Firebase init failed: $e");
   }
 
-  runApp(const FuelDirectApp());
+  runApp(const AppLifecycleManager(child: FuelDirectApp()));
 }
 
 class FuelDirectApp extends StatelessWidget {

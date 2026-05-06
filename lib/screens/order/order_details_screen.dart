@@ -268,7 +268,13 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     final String amount = amountVal > 0 ? amountVal.toStringAsFixed(2) : '0.00';
 
     final scheduledTime = order['scheduled_time'];
-    final dropOffNotes = (order['drop_off_instructions'] ?? order['notes'])?.toString() ?? '';
+    final dropOffNotes = (
+      order['drop_off_instructions'] ??
+      order['delivery_instructions'] ??
+      order['customer_notes'] ??
+      order['special_instructions'] ??
+      order['notes']
+    )?.toString().trim() ?? '';
     
     // Helper to format timeline dates (MMM dd, hh:mm a)
     String formatTimelineDate(String? isoString) {
@@ -628,34 +634,46 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                   ),
                 ),
 
-              // Drop-off Instructions (Conditional)
-              if (dropOffNotes.trim().isNotEmpty)
+              // Customer Notes — always visible for active/assigned orders
+              if (!isDelivered && status != 'CANCELLED')
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 20),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF9F5), // Subtle orange tint
+                    color: dropOffNotes.isNotEmpty
+                        ? const Color(0xFFFFF9F5)
+                        : const Color(0xFFF8F8F8),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFFFE8DD)),
+                    border: Border.all(
+                      color: dropOffNotes.isNotEmpty
+                          ? const Color(0xFFFFE8DD)
+                          : const Color(0xFFEEEEEE),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(
-                            Icons.note_alt_rounded,
-                            color: Color(0xFFFF4D00),
+                          Icon(
+                            dropOffNotes.isNotEmpty
+                                ? Icons.sticky_note_2_rounded
+                                : Icons.sticky_note_2_outlined,
+                            color: dropOffNotes.isNotEmpty
+                                ? const Color(0xFFFF4D00)
+                                : const Color(0xFFBBBBBB),
                             size: 16,
                           ),
                           const SizedBox(width: 8),
-                          const Text(
-                            'DROP-OFF INSTRUCTIONS',
+                          Text(
+                            'CUSTOMER NOTES',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFFFF4D00),
+                              color: dropOffNotes.isNotEmpty
+                                  ? const Color(0xFFFF4D00)
+                                  : const Color(0xFFBBBBBB),
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -663,11 +681,20 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        dropOffNotes,
-                        style: const TextStyle(
+                        dropOffNotes.isNotEmpty
+                            ? dropOffNotes
+                            : 'No special instructions provided.',
+                        style: TextStyle(
                           fontSize: 14,
-                          color: Color(0xFF555555),
-                          fontWeight: FontWeight.w600,
+                          color: dropOffNotes.isNotEmpty
+                              ? const Color(0xFF444444)
+                              : const Color(0xFFAAAAAA),
+                          fontWeight: dropOffNotes.isNotEmpty
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          fontStyle: dropOffNotes.isNotEmpty
+                              ? FontStyle.normal
+                              : FontStyle.italic,
                           height: 1.5,
                         ),
                       ),
@@ -760,11 +787,11 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                     // Fallback: open the in-app DeliveryNavigationScreen
                                     if (status == 'ACCEPTED' || status == 'ASSIGNED') {
                                       await Supabase.instance.client.from('orders').update({
-                                        'status': 'in_progress',
+                                        'status': 'IN_PROGRESS',
                                         'accepted_at': DateTime.now().toUtc().toIso8601String(),
                                         'driver_id': Supabase.instance.client.auth.currentUser?.id,
                                       }).eq('id', order['id']);
-                                      widget.order['status'] = 'in_progress';
+                                      widget.order['status'] = 'IN_PROGRESS';
                                       if (context.mounted) {
                                         Navigator.of(context).push(MaterialPageRoute(
                                             builder: (c) => DeliveryNavigationScreen(order: order)));

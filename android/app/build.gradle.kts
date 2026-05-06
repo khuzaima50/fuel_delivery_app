@@ -9,6 +9,8 @@ plugins {
 android {
     namespace = "com.fueldirect.fueldirect_app"
     compileSdk = flutter.compileSdkVersion
+    
+    // Yahan humne exact required NDK version laga diya hai
     ndkVersion = "27.0.12077973"
 
     compileOptions {

@@ -8,12 +8,14 @@ class SafetyComplianceScreen extends StatefulWidget {
   final String? meterPhotoUrl;
   final double deliveredGallons;
   final double pricePerGallon;
+  final double? computedTotal;   // exact amount shown on DeliveryProofScreen
   final Map<String, dynamic>? order;
   const SafetyComplianceScreen({
     super.key,
     this.meterPhotoUrl,
     this.deliveredGallons = 0.0,
     this.pricePerGallon = 4.85,
+    this.computedTotal,
     this.order,
   });
 
@@ -25,6 +27,13 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
   bool isFuelCapClosed = false;
   bool isNozzleSecured = false;
   bool _isFinalizing = false;
+  RealtimeChannel? _orderChannel;
+
+  @override
+  void dispose() {
+    _orderChannel?.unsubscribe();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -205,183 +214,90 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
               width: double.infinity,
               height: 58,
               child: ElevatedButton(
-                onPressed: (isFuelCapClosed && isNozzleSecured && !_isFinalizing)
+                      onPressed: (isFuelCapClosed && isNozzleSecured && !_isFinalizing)
                     ? () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final navigator = Navigator.of(context);
-                        setState(() => _isFinalizing = true);
-                        try {
-                          final user = Supabase.instance.client.auth.currentUser;
-                          if (user == null) throw Exception('Not logged in.');
-
-                          // Get order ID — try widget.order first
-                          String? orderId = widget.order?['id']?.toString();
-
-                          // Fallback: query active order if widget.order is null
-                          if (orderId == null) {
-                            debugPrint('[SafetyCompliance] widget.order is null, querying active order...');
-                            final res = await Supabase.instance.client
-                                .from('orders')
-                                .select()
-                                .eq('driver_id', user.id)
-                                .inFilter('status', ['assigned', 'emergency'])
-                                .order('created_at', ascending: false)
-                                .limit(1)
-                                .maybeSingle();
-                            if (res == null) throw Exception('No active order found. Please check your order status.');
-                            orderId = res['id']?.toString();
-                          }
-
-                          if (orderId == null) throw Exception('Order ID could not be determined.');
-                          debugPrint('[SafetyCompliance] Using orderId: $orderId');
-
-                          final double totalAmount = widget.deliveredGallons * widget.pricePerGallon;
-                          final String fuelType = widget.order?['fuel_type']?.toString() ?? 'Fuel';
-                          final String address = widget.order?['delivery_address']?.toString() ?? '';
-
-                          // Step 1: Link proof photo (optional — don't fail if table missing)
-                          if (widget.meterPhotoUrl != null) {
-                            try {
-                              await Supabase.instance.client.from('delivery_proofs').insert({
-                                'order_id': orderId,
-                                'photo_url': widget.meterPhotoUrl,
-                                'proof_type': 'meter_reading',
-                              });
-                              debugPrint('[SafetyCompliance] delivery_proofs inserted OK');
-                            } catch (e) {
-                              debugPrint('[SafetyCompliance] delivery_proofs insert skipped: $e');
-                            }
-                          }
-
-                          // Step 2: Safety checklist log (optional)
-                          try {
-                            await Supabase.instance.client.from('safety_checklists').insert({
-                              'driver_id': user.id,
-                              'order_id': orderId,
-                              'is_parking_brake_set': true,
-                              'is_engine_off': isFuelCapClosed,
-                              'no_smoking_or_flames': isNozzleSecured,
-                            });
-                            debugPrint('[SafetyCompliance] safety_checklists inserted OK');
-                          } catch (e) {
-                            debugPrint('[SafetyCompliance] safety_checklists insert skipped: $e');
-                          }
-
-                          // Step 3: CRITICAL — mark order as delivered
-                          debugPrint('[SafetyCompliance] Updating order to delivered...');
-                          final String nowIso = DateTime.now().toUtc().toIso8601String();
-                          try {
-                            // Prepare update map — using 'fuel_quantity' as requested
-                            // delivered_at is set so the Delivered tab 24-hour filter works
-                            final Map<String, dynamic> updateData = {
-                              'status': 'delivered',
-                              'driver_id': user.id,
-                              'total_amount': totalAmount,
-                              'driver_earning': totalAmount,
-                              'fuel_quantity': widget.deliveredGallons,
-                              'fuel_quantity_gallons': widget.deliveredGallons,
-                              'completed_at': nowIso,
-                              'delivered_at': nowIso,
-                            };
-
-                            // Try primary update
-                            await Supabase.instance.client.from('orders').update(updateData).eq('id', orderId);
-                          } catch (primaryError) {
-                            debugPrint('[SafetyCompliance] Primary update failed: $primaryError');
-                            
-                            // Check if it's a 'column not found' or 'schema cache' error
-                            final errorStr = primaryError.toString();
-                            if (errorStr.contains('fuel_quantity') || errorStr.contains('PGRST204')) {
-                               // Try fallback update without the quantity columns if they are blocking completion
-                               debugPrint('[SafetyCompliance] Attempting fallback update without fuel_quantity...');
-                               try {
-                                 await Supabase.instance.client.from('orders').update({
-                                   'status': 'delivered',
-                                   'total_amount': totalAmount,
-                                   'driver_earning': totalAmount,
-                                   'completed_at': nowIso,
-                                   'delivered_at': nowIso,
-                                 }).eq('id', orderId);
-                               } catch (fallbackError) {
-                                  throw primaryError;
-                               }
-                            } else if (errorStr.contains('completed_at') || errorStr.contains('delivered_at')) {
-                               // Fallback: update without timestamp columns
-                                 await Supabase.instance.client.from('orders').update({
-                                 'status': 'delivered',
-                                 'total_amount': totalAmount,
-                                 'driver_earning': totalAmount,
-                                 'fuel_quantity': widget.deliveredGallons,
-                               }).eq('id', orderId);
-                            } else {
-                               rethrow;
-                            }
-                          }
-                          debugPrint('[SafetyCompliance] Order marked delivered!');
-
-                          // Notify customer: order completed
-                          final userId = widget.order?['user_id']?.toString();
-                          if (userId != null && userId.isNotEmpty) {
-                            NotificationService.notifyUserOrderCompleted(
-                                userId, orderId);
-                          }
-                          
-                          // Trigger Notification
-                          NotificationService.showImmediateNotification(
-                            title: 'Delivery Complete! ✅',
-                            body: 'Order #${orderId.substring(0, 4).toUpperCase()} has been successfully delivered.',
-                            type: 'order',
-                            orderId: orderId,
-                          );
-
-                          // Step 4: Insert into earnings table
-                          try {
-                            await Supabase.instance.client.from('earnings').insert({
-                              'driver_id': user.id,
-                              'order_id': orderId,
-                              'amount': totalAmount,
-                              'tip_amount': 0.0,
-                              'description': 'Earnings from Order $orderId',
-                              'status': 'completed',
-                            });
-                            debugPrint('[SafetyCompliance] Earnings updated OK');
-                          } catch (e) {
-                            debugPrint('[SafetyCompliance] earnings insert error: $e');
-                          }
-
-                          if (mounted) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Order Completed Successfully!'),
-                                backgroundColor: Color(0xFFFF4D00),
+                        // ── Confirmation dialog before finalizing ───────────
+                        final double previewTotal = widget.computedTotal ??
+                            (widget.deliveredGallons * widget.pricePerGallon);
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            title: const Text(
+                              'Confirm Delivery',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
+                                color: Color(0xFF1C2733),
                               ),
-                            );
-                            navigator.pushReplacement(
-                              MaterialPageRoute(
-                                builder: (context) => DeliveryCompleteScreen(
-                                  orderId: orderId!,
-                                  deliveredGallons: widget.deliveredGallons,
-                                  totalAmount: totalAmount,
-                                  fuelType: fuelType,
-                                  address: address,
+                            ),
+                            content: Text(
+                              'Order is \$${previewTotal.toStringAsFixed(2)} = '
+                              '${widget.deliveredGallons.toStringAsFixed(2)} gallons. '
+                              'Please confirm meter is set to '
+                              '${widget.deliveredGallons.toStringAsFixed(2)} gallons.',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Color(0xFF444444),
+                                height: 1.5,
+                              ),
+                            ),
+                            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            actions: [
+                              SizedBox(
+                                width: double.infinity,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () => Navigator.of(ctx).pop(false),
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Color(0xFFDDDDDD)),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                        ),
+                                        child: const Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF888888),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () => Navigator.of(ctx).pop(true),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFFFF4D00),
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          elevation: 0,
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                        ),
+                                        child: const Text(
+                                          'Yes',
+                                          style: TextStyle(fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            );
-                          }
-                        } catch (e) {
-                          debugPrint('[SafetyCompliance] FINAL ERROR: $e');
-                          if (mounted) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
-                                backgroundColor: Colors.red,
-                                duration: const Duration(seconds: 5),
-                              ),
-                            );
-                          }
-                          setState(() => _isFinalizing = false);
-                          return;
-                        }
+                            ],
+                          ),
+                        );
+
+                        if (confirmed != true) return; // driver tapped Cancel
+                        _finalizeDelivery();
                       }
                     : null,
                 style: ElevatedButton.styleFrom(
@@ -497,4 +413,198 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
       ),
     );
   }
+
+  void _navigateToSuccess(Map<String, dynamic> completedOrder) {
+    if (!mounted) return;
+
+    final orderId = completedOrder['id']?.toString() ?? '';
+    final qty = double.tryParse((completedOrder['fuel_quantity_gallons'] ?? completedOrder['fuel_quantity'])?.toString() ?? '0.0') ?? 0.0;
+    final earned = double.tryParse((completedOrder['driver_earning'] ?? completedOrder['total_amount'])?.toString() ?? '0.0') ?? 0.0;
+    final fuelType = completedOrder['fuel_type']?.toString() ?? 'Fuel';
+    final location = completedOrder['delivery_address']?.toString() ?? 'Customer Location';
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => DeliveryCompleteScreen(
+          orderId: orderId,
+          deliveredGallons: qty,
+          totalAmount: earned,
+          fuelType: fuelType,
+          address: location,
+        ),
+      ),
+    );
+  }
+
+  /// Called after the driver confirms the dialog.
+  /// Contains the full save-to-DB and navigation logic.
+  Future<void> _finalizeDelivery() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isFinalizing = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('Not logged in.');
+
+      // Get order ID — try widget.order first
+      String? orderId = widget.order?['id']?.toString();
+
+      // Fallback: query active order if widget.order is null
+      if (orderId == null) {
+        debugPrint('[SafetyCompliance] widget.order is null, querying active order...');
+        final res = await Supabase.instance.client
+            .from('orders')
+            .select()
+            .eq('driver_id', user.id)
+            .inFilter('status', ['assigned', 'emergency'])
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        if (res == null) throw Exception('No active order found. Please check your order status.');
+        orderId = res['id']?.toString();
+      }
+
+      if (orderId == null) throw Exception('Order ID could not be determined.');
+      debugPrint('[SafetyCompliance] Using orderId: $orderId');
+
+      // Use the pre-computed total from DeliveryProofScreen
+      // so the driver always pays exactly what they saw.
+      final double totalAmount =
+          widget.computedTotal ?? (widget.deliveredGallons * widget.pricePerGallon);
+      debugPrint(
+          '[SafetyCompliance] gallons=${widget.deliveredGallons}, '
+          'pricePerGal=${widget.pricePerGallon}, '
+          'total=$totalAmount');
+
+      // Step 1: Link proof photo (optional — don't fail if table missing)
+      if (widget.meterPhotoUrl != null) {
+        try {
+          await Supabase.instance.client.from('delivery_proofs').insert({
+            'order_id': orderId,
+            'photo_url': widget.meterPhotoUrl,
+            'proof_type': 'meter_reading',
+          });
+          debugPrint('[SafetyCompliance] delivery_proofs inserted OK');
+        } catch (e) {
+          debugPrint('[SafetyCompliance] delivery_proofs insert skipped: $e');
+        }
+      }
+
+      // Step 2: Safety checklist log (optional)
+      try {
+        await Supabase.instance.client.from('safety_checklists').insert({
+          'driver_id': user.id,
+          'order_id': orderId,
+          'is_parking_brake_set': true,
+          'is_engine_off': isFuelCapClosed,
+          'no_smoking_or_flames': isNozzleSecured,
+        });
+        debugPrint('[SafetyCompliance] safety_checklists inserted OK');
+      } catch (e) {
+        debugPrint('[SafetyCompliance] safety_checklists insert skipped: $e');
+      }
+
+      // Step 3: CRITICAL — mark order as delivered
+      debugPrint('[SafetyCompliance] Updating order to delivered...');
+      final String nowIso = DateTime.now().toUtc().toIso8601String();
+      try {
+        final Map<String, dynamic> updateData = {
+          'status': 'delivered',
+          'driver_id': user.id,
+          'total_amount': totalAmount,
+          'driver_earning': totalAmount,
+          'fuel_quantity': widget.deliveredGallons,
+          'fuel_quantity_gallons': widget.deliveredGallons,
+          'completed_at': nowIso,
+          'delivered_at': nowIso,
+        };
+        await Supabase.instance.client.from('orders').update(updateData).eq('id', orderId);
+      } catch (primaryError) {
+        debugPrint('[SafetyCompliance] Primary update failed: $primaryError');
+        final errorStr = primaryError.toString();
+        if (errorStr.contains('fuel_quantity') || errorStr.contains('PGRST204')) {
+          debugPrint('[SafetyCompliance] Attempting fallback update without fuel_quantity...');
+          try {
+            await Supabase.instance.client.from('orders').update({
+              'status': 'delivered',
+              'total_amount': totalAmount,
+              'driver_earning': totalAmount,
+              'completed_at': nowIso,
+              'delivered_at': nowIso,
+            }).eq('id', orderId);
+          } catch (_) {
+            throw primaryError;
+          }
+        } else if (errorStr.contains('completed_at') || errorStr.contains('delivered_at')) {
+          await Supabase.instance.client.from('orders').update({
+            'status': 'delivered',
+            'total_amount': totalAmount,
+            'driver_earning': totalAmount,
+            'fuel_quantity': widget.deliveredGallons,
+          }).eq('id', orderId);
+        } else {
+          rethrow;
+        }
+      }
+      debugPrint('[SafetyCompliance] Order marked delivered!');
+
+      // Notify customer
+      final userId = widget.order?['user_id']?.toString();
+      if (userId != null && userId.isNotEmpty) {
+        NotificationService.notifyUserOrderCompleted(userId, orderId);
+      }
+
+      NotificationService.showImmediateNotification(
+        title: 'Delivery Complete! ✅',
+        body: 'Order #${orderId.substring(0, 4).toUpperCase()} has been successfully delivered.',
+        type: 'order',
+        orderId: orderId,
+      );
+
+      // Step 4: Insert into earnings table
+      try {
+        await Supabase.instance.client.from('earnings').insert({
+          'driver_id': user.id,
+          'order_id': orderId,
+          'amount': totalAmount,
+          'tip_amount': 0.0,
+          'description': 'Earnings from Order $orderId',
+          'status': 'completed',
+        });
+        debugPrint('[SafetyCompliance] Earnings updated OK');
+      } catch (e) {
+        debugPrint('[SafetyCompliance] earnings insert error: $e');
+      }
+
+      if (mounted) {
+        setState(() => _isFinalizing = false);
+        final completedOrderData = {
+          ...(widget.order ?? {}),
+          'id': orderId,
+          'status': 'delivered',
+          'total_amount': totalAmount,
+          'driver_earning': totalAmount,
+          'fuel_quantity': widget.deliveredGallons,
+          'fuel_quantity_gallons': widget.deliveredGallons,
+          'fuel_type': widget.order?['fuel_type'] ?? 'Fuel',
+          'delivery_address': widget.order?['delivery_address'] ?? 'Customer Location',
+          'completed_at': nowIso,
+          'delivered_at': nowIso,
+        };
+        _navigateToSuccess(completedOrderData);
+      }
+    } catch (e) {
+      debugPrint('[SafetyCompliance] FINAL ERROR: $e');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        setState(() => _isFinalizing = false);
+      }
+    }
+  }
 }
+

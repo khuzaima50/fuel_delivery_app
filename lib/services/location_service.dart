@@ -71,13 +71,8 @@ class DriverLocationStream {
     // ── 3. Open position stream ─────────────────────────────────────────────
     final locationSettings = AndroidSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 10, // metres — only emit when moved ≥10 m
-      intervalDuration: const Duration(seconds: 3),
-      foregroundNotificationConfig: const ForegroundNotificationConfig(
-        notificationText: 'FuelDirect is tracking your delivery location.',
-        notificationTitle: 'Live Delivery Tracking',
-        enableWakeLock: true,
-      ),
+      distanceFilter: 0, // emit every fix regardless of movement
+      intervalDuration: const Duration(seconds: 2),
     );
 
     _positionSub = Geolocator.getPositionStream(

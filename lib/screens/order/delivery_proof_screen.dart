@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'meter_verification_screen.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'safety_compliance_screen.dart';
 
 class DeliveryProofScreen extends StatefulWidget {
@@ -15,25 +17,39 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
   final FocusNode _gallonsFocus = FocusNode();
   double _estimatedTotal = 0.00;
   late final double _pricePerGallon;
-  String? _meterPhotoUrl;
+
+  // Photo state
+  File? _localImage;         // shown as preview immediately
+  String? _meterPhotoUrl;    // Supabase Storage public URL (set after upload)
+  bool _isUploading = false;
 
   @override
   void initState() {
     super.initState();
-    // Calculate price per gallon dynamically from original order to maintain rate consistency
-    final requestedTotal = double.tryParse(widget.order?['total_amount']?.toString() ?? '') ?? 0.0;
-    final requestedQty = double.tryParse((widget.order?['fuel_quantity'] ?? widget.order?['fuel_quantity_gallons'])?.toString() ?? '') ?? 0.0;
-    
+
+    // ── Resolve price per gallon ───────────────────────────────────────────
+    final requestedTotal =
+        double.tryParse(widget.order?['total_amount']?.toString() ?? '') ?? 0.0;
+    final requestedQty = double.tryParse(
+          (widget.order?['fuel_quantity'] ??
+                  widget.order?['fuel_quantity_gallons'])
+              ?.toString() ??
+              '',
+        ) ??
+        0.0;
+
     if (requestedTotal > 0 && requestedQty > 0) {
-      _pricePerGallon = requestedTotal / requestedQty;
+      _pricePerGallon =
+          double.parse((requestedTotal / requestedQty).toStringAsFixed(4));
     } else {
       _pricePerGallon =
           double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
           double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
           4.85;
     }
+
     _gallonsController.addListener(_calculateTotal);
-    _gallonsFocus.addListener(() => setState(() {})); // rebuild on focus change
+    _gallonsFocus.addListener(() => setState(() {}));
   }
 
   @override
@@ -51,9 +67,71 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
     });
   }
 
+  // ── Take photo → upload → set URL ────────────────────────────────────────
+  Future<void> _pickAndUploadPhoto() async {
+    try {
+      final picker = ImagePicker();
+      final XFile? picked = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (picked == null) return; // driver cancelled
+
+      final file = File(picked.path);
+      setState(() {
+        _localImage = file;   // show preview immediately
+        _meterPhotoUrl = null; // reset old URL while we upload
+        _isUploading = true;
+      });
+
+      // Upload to Supabase Storage bucket "delivery-proofs"
+      final fileExt = picked.path.split('.').last;
+      final fileName =
+          'meter_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+      final storagePath = 'meter_readings/$fileName';
+
+      await Supabase.instance.client.storage
+          .from('delivery-proofs')
+          .upload(storagePath, file);
+
+      final publicUrl = Supabase.instance.client.storage
+          .from('delivery-proofs')
+          .getPublicUrl(storagePath);
+
+      if (mounted) {
+        setState(() {
+          _meterPhotoUrl = publicUrl;
+          _isUploading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo uploaded successfully ✅'),
+            backgroundColor: Color(0xFF4CAF50),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[DeliveryProof] Upload error: $e');
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload failed: ${e.toString().split(']').last}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool hasValue = (double.tryParse(_gallonsController.text) ?? 0.0) > 0;
+    final bool hasValue = (double.tryParse(_gallonsController.text) ?? 0.0) > 0;
+    final bool photoReady = _meterPhotoUrl != null && !_isUploading;
+    final bool canProceed = photoReady && hasValue;
+
     return Scaffold(
       backgroundColor: const Color(0xFFFBFBFB),
       resizeToAvoidBottomInset: true,
@@ -109,7 +187,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Please capture the following media to document the successful fuel delivery and ensure compliance.',
+                'Capture the fuel meter and enter the delivered gallons to complete the order.',
                 style: TextStyle(
                   fontSize: 13,
                   color: Color(0xFF888888),
@@ -119,135 +197,75 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
               ),
               const SizedBox(height: 24),
 
-              Text(
-                'VISUAL EVIDENCE',
+              // ── Section label ──────────────────────────────────────────
+              const Text(
+                'METER GAUGE PHOTO',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFF888888),
+                  color: Color(0xFF888888),
                   letterSpacing: 0.5,
                 ),
               ),
               const SizedBox(height: 12),
+
+              // ── Photo capture widget ───────────────────────────────────
               GestureDetector(
-                onTap: () async {
-                  final result = await Navigator.of(context).push<String>(
-                    MaterialPageRoute(
-                      builder: (context) => MeterVerificationScreen(
-                        deliveredGallons: double.tryParse(_gallonsController.text) ?? 0.0,
-                        order: widget.order,
-                      ),
+                onTap: _isUploading ? null : _pickAndUploadPhoto,
+                child: Container(
+                  width: double.infinity,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: _localImage != null
+                        ? Colors.black
+                        : const Color(0xFFEEEEEE),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: photoReady
+                          ? const Color(0xFF4CAF50)
+                          : _localImage != null
+                              ? const Color(0xFFFF4D00)
+                              : const Color(0xFFDDDDDD),
+                      width: photoReady ? 2 : 1.5,
                     ),
-                  );
-                  if (result != null) {
-                    setState(() {
-                      _meterPhotoUrl = result;
-                    });
-                  }
-                },
-                child: CustomPaint(
-                  painter: DashedRectPainter(
-                    color: _meterPhotoUrl != null
-                        ? const Color(0xFF4CAF50)
-                        : const Color(0xFFCCCCCC),
-                    strokeWidth: 1,
-                    gap: 4,
                   ),
-                  child: Container(
-                    width: double.infinity,
-                    height: 140,
-                    decoration: BoxDecoration(
-                      color: _meterPhotoUrl != null
-                          ? const Color(0xFFE8F5E9)
-                          : const Color(0xFFEEEEEE),
-                      borderRadius: BorderRadius.circular(16),
-                      image: _meterPhotoUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(_meterPhotoUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: _meterPhotoUrl != null
-                        ? Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.check_circle_rounded,
-                                color: Colors.white,
-                                size: 48,
-                              ),
-                            ),
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.camera_alt_rounded,
-                                    color: Color(0xFF888888),
-                                    size: 32,
-                                  ),
-                                  Positioned(
-                                    right: -2,
-                                    bottom: -2,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(1),
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFEEEEEE),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.add_circle_rounded,
-                                        color: Color(0xFF888888),
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Capture Meter Gauge Photo',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF888888),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Ensure the final digits are clearly visible',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFFAAAAAA),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: _buildPhotoWidget(photoReady),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
 
-              Text(
+              // Retake button (shows after a photo is taken)
+              if (_localImage != null && !_isUploading)
+                TextButton.icon(
+                  onPressed: _pickAndUploadPhoto,
+                  icon: const Icon(Icons.refresh_rounded,
+                      size: 16, color: Color(0xFFFF4D00)),
+                  label: const Text(
+                    'Retake Photo',
+                    style: TextStyle(
+                      color: Color(0xFFFF4D00),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 20),
+
+              // ── Manual Entry label ─────────────────────────────────────
+              const Text(
                 'MANUAL ENTRY',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFF888888),
+                  color: Color(0xFF888888),
                   letterSpacing: 0.5,
                 ),
               ),
               const SizedBox(height: 12),
 
-              // Gallons Input — direct TextField, no GestureDetector
+              // ── Gallons input ──────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -266,7 +284,9 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                   children: [
                     Icon(
                       Icons.gas_meter_rounded,
-                      color: hasValue ? const Color(0xFFFF4D00) : const Color(0xFFD0D7DE),
+                      color: hasValue
+                          ? const Color(0xFFFF4D00)
+                          : const Color(0xFFD0D7DE),
                       size: 24,
                     ),
                     const SizedBox(width: 12),
@@ -281,7 +301,8 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                               ? const Color(0xFF1F1F1F)
                               : const Color(0xFF888888),
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           border: InputBorder.none,
                           hintText: '0.00',
@@ -300,7 +321,9 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
-                        color: hasValue ? const Color(0xFF888888) : const Color(0xFFD0D7DE),
+                        color: hasValue
+                            ? const Color(0xFF888888)
+                            : const Color(0xFFD0D7DE),
                       ),
                     ),
                   ],
@@ -308,7 +331,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Estimated Total Card
+              // ── Estimated Total card ───────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -332,7 +355,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'at \$$_pricePerGallon / gal',
+                          'at \$${_pricePerGallon.toStringAsFixed(2)} / gal',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF9CB0C3),
@@ -346,15 +369,36 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
-                        color: hasValue ? const Color(0xFFFF4D00) : const Color(0xFFF2F2F2),
+                        color: hasValue
+                            ? const Color(0xFFFF4D00)
+                            : const Color(0xFFF2F2F2),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 24),
 
-              // Warning Box
+              // ── Required steps checklist ───────────────────────────────
+              _buildRequirementRow(
+                done: photoReady,
+                loading: _isUploading,
+                label: photoReady
+                    ? 'Meter photo uploaded'
+                    : _isUploading
+                        ? 'Uploading photo…'
+                        : 'Take meter gauge photo (required)',
+              ),
+              const SizedBox(height: 8),
+              _buildRequirementRow(
+                done: hasValue,
+                label: hasValue
+                    ? 'Gallons entered: ${_gallonsController.text}'
+                    : 'Enter delivered gallons (required)',
+              ),
+              const SizedBox(height: 24),
+
+              // ── Compliance note ────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -362,28 +406,18 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFFFE8DD)),
                 ),
-                child: Row(
+                child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFFF4D00),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.check_rounded,
-                        color: Color(0xFFFF4D00),
-                        size: 10,
-                      ),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFFFF4D00),
+                      size: 16,
                     ),
-                    const SizedBox(width: 12),
-                    const Expanded(
+                    SizedBox(width: 12),
+                    Expanded(
                       child: Text(
-                        'Manual entries are flagged for supervisor review. Please ensure the photo matches the entered quantity to avoid payment delays.',
+                        'Manual entries are flagged for supervisor review. Ensure the photo clearly shows the meter digits matching the entered quantity.',
                         style: TextStyle(
                           fontSize: 11,
                           color: Color(0xFFFF4D00),
@@ -407,31 +441,37 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
           width: double.infinity,
           height: 58,
           child: ElevatedButton(
-            onPressed: (_meterPhotoUrl != null && hasValue)
+            onPressed: canProceed
                 ? () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (context) => SafetyComplianceScreen(
                           meterPhotoUrl: _meterPhotoUrl,
-                          deliveredGallons: double.tryParse(_gallonsController.text) ?? 0.0,
+                          deliveredGallons:
+                              double.tryParse(_gallonsController.text) ?? 0.0,
                           pricePerGallon: _pricePerGallon,
+                          computedTotal: _estimatedTotal,
                           order: widget.order,
                         ),
                       ),
                     );
                   }
                 : () {
+                    final msg = _isUploading
+                        ? 'Please wait for the photo to finish uploading.'
+                        : !photoReady
+                            ? 'Please take a photo of the fuel meter first.'
+                            : 'Please enter the delivered gallons.';
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please capture meter photo and enter gallons.'),
+                      SnackBar(
+                        content: Text(msg),
                         backgroundColor: Colors.red,
                       ),
                     );
                   },
             style: ElevatedButton.styleFrom(
-              backgroundColor: (_meterPhotoUrl != null && hasValue)
-                  ? const Color(0xFFFF4D00)
-                  : const Color(0xFFCCCCCC),
+              backgroundColor:
+                  canProceed ? const Color(0xFFFF4D00) : const Color(0xFFCCCCCC),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -454,8 +494,147 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
       ),
     );
   }
+
+  // ── Photo area widget ────────────────────────────────────────────────────
+  Widget _buildPhotoWidget(bool photoReady) {
+    if (_isUploading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Color(0xFFFF4D00)),
+            SizedBox(height: 16),
+            Text(
+              'Uploading…',
+              style: TextStyle(
+                color: Color(0xFFFF4D00),
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_localImage != null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(_localImage!, fit: BoxFit.cover),
+          // Green overlay when upload done
+          if (photoReady)
+            Container(
+              color: Colors.black.withValues(alpha: 0.35),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF4CAF50),
+                      size: 52,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Photo Saved',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
+    // Empty state
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: const [
+        Icon(
+          Icons.camera_alt_rounded,
+          color: Color(0xFFAAAAAA),
+          size: 40,
+        ),
+        SizedBox(height: 12),
+        Text(
+          'Tap to take meter photo',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF888888),
+          ),
+        ),
+        SizedBox(height: 6),
+        Text(
+          'Ensure the final digits are clearly visible',
+          style: TextStyle(
+            fontSize: 12,
+            color: Color(0xFFAAAAAA),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Requirement row ──────────────────────────────────────────────────────
+  Widget _buildRequirementRow({
+    required bool done,
+    required String label,
+    bool loading = false,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done
+                ? const Color(0xFF4CAF50)
+                : loading
+                    ? const Color(0xFFFF9800)
+                    : const Color(0xFFEEEEEE),
+          ),
+          child: loading
+              ? const Padding(
+                  padding: EdgeInsets.all(3),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Icon(
+                  done ? Icons.check : Icons.circle_outlined,
+                  size: 14,
+                  color: done ? Colors.white : const Color(0xFFCCCCCC),
+                ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: done
+                  ? const Color(0xFF4CAF50)
+                  : loading
+                      ? const Color(0xFFFF9800)
+                      : const Color(0xFF888888),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
+// ── Dashed border painter (kept for any other usages) ──────────────────────
 class DashedRectPainter extends CustomPainter {
   final Color color;
   final double strokeWidth;
@@ -482,7 +661,6 @@ class DashedRectPainter extends CustomPainter {
       ),
     );
 
-    // Simple dash implementation
     final dashPath = Path();
     double distance = 0.0;
     for (final metric in path.computeMetrics()) {

@@ -8,7 +8,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../../services/location_service.dart';
-import 'fuel_pickup_screen.dart';
+import 'safety_checklist_starting_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DeliveryNavigationScreen — Driver navigation TO customer location.
@@ -54,6 +55,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
   bool _gpsDisabled = false;
   bool _isLoadingRoute = false;
   bool _routeFetched = false;
+  bool _isReleasing = false; // guard for Release Order button
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   double _distanceMiles = 0.0;
@@ -94,6 +96,27 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     );
 
     _startLocationStream();
+    _fetchRouteEarly();
+  }
+
+  Future<void> _fetchRouteEarly() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+      if (!mounted) return;
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      _currentMarkerPos = latLng;
+      _updateDriverMarker(latLng, pos.heading);
+      if (_destLat != null && _destLng != null && !_routeFetched) {
+        _fetchRoute(pos);
+      }
+    } catch (e) {
+      debugPrint('[DeliveryNav] Early GPS fix failed: $e');
+    }
   }
 
   @override
@@ -536,17 +559,133 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                     ],
                   ),
                   const SizedBox(height: 16),
+                  // ── Customer Notes ──────────────────────────────────────
+                  Builder(builder: (context) {
+                    final notes = (
+                      widget.order?['drop_off_instructions'] ??
+                      widget.order?['delivery_instructions'] ??
+                      widget.order?['customer_notes'] ??
+                      widget.order?['special_instructions'] ??
+                      widget.order?['notes']
+                    )?.toString().trim() ?? '';
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: notes.isNotEmpty
+                            ? const Color(0xFFFFF9F5)
+                            : const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: notes.isNotEmpty
+                              ? const Color(0xFFFFE8DD)
+                              : const Color(0xFFEEEEEE),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            notes.isNotEmpty
+                                ? Icons.sticky_note_2_rounded
+                                : Icons.sticky_note_2_outlined,
+                            color: notes.isNotEmpty
+                                ? const Color(0xFFFF4D00)
+                                : const Color(0xFFCCCCCC),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'CUSTOMER NOTES',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: notes.isNotEmpty
+                                        ? const Color(0xFFFF4D00)
+                                        : const Color(0xFFCCCCCC),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  notes.isNotEmpty
+                                      ? notes
+                                      : 'No special instructions provided.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: notes.isNotEmpty
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    fontStyle: notes.isNotEmpty
+                                        ? FontStyle.normal
+                                        : FontStyle.italic,
+                                    color: notes.isNotEmpty
+                                        ? const Color(0xFF333333)
+                                        : const Color(0xFFAAAAAA),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                   SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                FuelPickupScreen(order: widget.order),
-                          ),
-                        );
+                      onPressed: () async {
+                        final orderId = widget.order?['id']?.toString();
+                        if (orderId == null) return;
+
+                        try {
+                          final now = DateTime.now().toUtc().toIso8601String();
+                          try {
+                            await Supabase.instance.client.from('orders').update({
+                              'status': 'DRIVER_ARRIVED',
+                              'arrived_at': now,
+                            }).eq('id', orderId);
+                          } catch (e) {
+                            debugPrint('[DeliveryNavigation] arrived_at update failed: $e');
+                            await Supabase.instance.client.from('orders').update({
+                              'status': 'DRIVER_ARRIVED',
+                            }).eq('id', orderId);
+                          }
+
+                          widget.order?['status'] = 'DRIVER_ARRIVED';
+                          widget.order?['arrived_at'] = now;
+
+                          if (!context.mounted) return;
+                          
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SafetyChecklistStartingScreen(order: widget.order),
+                            ),
+                          );
+                          
+                        } catch (e) {
+                          debugPrint('[DeliveryNavigation] Error: $e');
+                          if (!context.mounted) return;
+                          
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to update: $e')),
+                          );
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  SafetyChecklistStartingScreen(order: widget.order),
+                            ),
+                          );
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFF4D00),
@@ -569,6 +708,44 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+
+                  // ── Release Order button ────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: OutlinedButton.icon(
+                      onPressed: _isReleasing ? null : _releaseOrder,
+                      icon: _isReleasing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFCC0000),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 18,
+                              color: Color(0xFFCC0000),
+                            ),
+                      label: Text(
+                        _isReleasing ? 'Releasing…' : 'Release Order',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: Color(0xFFCC0000),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: Color(0xFFCC0000), width: 1.5),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -576,6 +753,143 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
         ],
       ),
     );
+  }
+
+  // ── Release Order ────────────────────────────────────────────────
+  Future<void> _releaseOrder() async {
+    final orderId = widget.order?['id']?.toString();
+    if (orderId == null) return;
+
+    // ── Confirmation dialog ────────────────────────────────────
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded,
+                color: Color(0xFFCC0000), size: 22),
+            SizedBox(width: 10),
+            Text(
+              'Release Order?',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: Color(0xFF1C2733),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to release this order?\n\nIt will be returned to the available pool and reassigned to another driver.',
+          style: TextStyle(
+            fontSize: 14,
+            color: Color(0xFF555555),
+            height: 1.5,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFDDDDDD)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF888888)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFCC0000),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Release',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    // ── Supabase update ───────────────────────────────────────
+    setState(() => _isReleasing = true);
+    try {
+      await Supabase.instance.client.from('orders').update({
+        'status': 'available',
+        'driver_id': null,
+        'driver_name': null,
+        'driver_photo': null,
+        'driver_vehicle': null,
+        'driver_phone': null,
+        'driver_latitude': null,
+        'driver_longitude': null,
+        'assigned_at': null,
+      }).eq('id', orderId);
+
+      debugPrint('[ReleaseOrder] Order $orderId released back to pool');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Text('Order released. It will be reassigned.'),
+            ],
+          ),
+          backgroundColor: const Color(0xFF4CAF50),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(20),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Pop back to the orders list
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
+      debugPrint('[ReleaseOrder] Error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to release order: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isReleasing = false);
+    }
   }
 
   Widget _circleBtn(IconData icon, Color iconColor, VoidCallback onTap,
