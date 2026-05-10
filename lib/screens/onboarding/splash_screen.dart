@@ -49,7 +49,6 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted) return;
 
       if (driver == null) {
-        // Driver row missing — send to onboarding
         debugPrint('[Splash] No driver row found — sending to onboarding');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const OnboardingScreen()),
@@ -65,22 +64,30 @@ class _SplashScreenState extends State<SplashScreen> {
       debugPrint('[Splash] docs=$docsSubmitted profile=$profileCompleted vehicle=$vehicleAdded');
 
       if (!docsSubmitted) {
-        // Has not uploaded documents yet
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const DocumentVerificationScreen()),
         );
-      } else if (!profileCompleted) {
-        // Uploaded docs but hasn't completed profile
+        return;
+      }
+
+      if (!profileCompleted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
         );
-      } else if (!vehicleAdded) {
-        // Profile done but vehicle not added
+        return;
+      }
+
+      if (!vehicleAdded) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const VehicleInfoScreen()),
         );
-      } else {
-        // All steps complete → Dashboard
+        return;
+      }
+
+      // ── Profile complete — Go to Dashboard ────────────────────────────────
+      // Note: Auto-resume of active orders has been disabled per user request
+      // to ensure the app starts fresh each time.
+      if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const DashboardScreen()),
         );

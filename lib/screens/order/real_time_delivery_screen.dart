@@ -699,6 +699,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
             const LatLng(24.8607, 67.0011); // Karachi fallback
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           Positioned.fill(

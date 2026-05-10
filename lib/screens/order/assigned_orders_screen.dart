@@ -42,6 +42,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   StreamSubscription<List<Map<String, dynamic>>>? _driverStatusSubscription;
   bool? _isOnline;
 
+  // ── Accept-in-progress guard (order ID that is currently being accepted) ──
+  String? _acceptingOrderId;
+
   @override
   void initState() {
     super.initState();
@@ -167,8 +170,24 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             final updated = Map<String, dynamic>.from(payload.newRecord);
             debugPrint('[Realtime] ORDER UPDATE id=${updated['id']} status=${updated['status']} driver=${updated['driver_id']}');
             if (!mounted) return;
+
+            final myId = Supabase.instance.client.auth.currentUser?.id;
+            final updatedDriverId = updated['driver_id']?.toString();
+            final updatedStatus  = updated['status']?.toString().toLowerCase();
+
             setState(() {
               final idx = _orders.indexWhere((o) => o['id'] == updated['id']);
+
+              // If this order was just assigned to ANOTHER driver, remove it
+              // from our local list so it instantly vanishes from Available tab.
+              if (updatedDriverId != null &&
+                  updatedDriverId.isNotEmpty &&
+                  updatedDriverId != myId &&
+                  (updatedStatus == 'assigned' || updatedStatus == 'accepted')) {
+                if (idx != -1) _orders.removeAt(idx);
+                return;
+              }
+
               if (idx != -1) {
                 _orders[idx] = updated; // In-place update → tab filter reacts instantly
               } else {
@@ -259,41 +278,20 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       final driverVehicle = profile?['vehicle_type'] ?? 'Fuel Truck';
       final driverPhone = profile?['phone'] ?? '';
 
-      // ─ Optimistic local update: instantly move to correct tab ─
       final nowTs = DateTime.now().toUtc();
-      int targetTab = 1; // Default to Assigned
-      
-      setState(() {
-        final idx = _orders.indexWhere((o) => o['id'] == orderId);
-        if (idx != -1) {
-          final order = _orders[idx];
-          final sTime = order['scheduled_time'];
-          if (sTime != null && sTime.toString().trim().isNotEmpty) {
-            try {
-              final scheduledDate = DateTime.parse(sTime.toString()).toUtc();
-              if (scheduledDate.difference(nowTs).inMinutes > 60) {
-                targetTab = 2; // Move to Scheduled tab
-              }
-            } catch (_) {}
-          }
 
-          _orders[idx] = Map<String, dynamic>.from(order)
-            ..['status'] = 'assigned'
-            ..['driver_id'] = user.id
-            ..['assigned_at'] = nowTs.toIso8601String()
-            ..['driver_name'] = driverName
-            ..['driver_photo'] = driverPhoto
-            ..['driver_vehicle'] = driverVehicle;
-        }
-        _activeFilterIndex = targetTab;
-      });
-
+      // Get current GPS position (best effort — don't block accept if it fails)
       Position? currentPos;
       try {
-        currentPos = await Geolocator.getCurrentPosition();
+        currentPos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
       } catch (_) {}
 
-      final updatePayload = {
+      final updatePayload = <String, dynamic>{
         'status': 'assigned',
         'driver_id': user.id,
         'assigned_at': nowTs.toIso8601String(),
@@ -308,8 +306,75 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         updatePayload['driver_longitude'] = currentPos.longitude;
       }
 
-      // Commit to DB
-      await Supabase.instance.client.from('orders').update(updatePayload).eq('id', orderId);
+      // ── Conditional DB update (race-safe) ─────────────────────────────────
+      // Only succeeds if status is still pending/available AND driver_id is null.
+      // If another driver accepted a millisecond earlier, returns 0 rows.
+      final List<dynamic> updated = await Supabase.instance.client
+          .from('orders')
+          .update(updatePayload)
+          .eq('id', orderId)
+          .inFilter('status', ['available', 'pending', 'PENDING'])
+          .filter('driver_id', 'is', null)
+          .select('id'); // returns the updated rows (empty list = race lost)
+
+      // ── Race condition detected ────────────────────────────────────────────
+      if (updated.isEmpty) {
+        debugPrint('[Orders] Race condition: order $orderId was accepted by another driver');
+        // Refresh from DB to get the real current state
+        await _fetchOrders();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Sorry, this order was just accepted by another driver.',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(20),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return; // ← stop here; do NOT navigate
+      }
+
+      // DB write succeeded → now safely update local state and switch tab
+      int targetTab = 1; // Default: Assigned
+      if (mounted) {
+        setState(() {
+          final idx = _orders.indexWhere((o) => o['id'] == orderId);
+          if (idx != -1) {
+            final order = _orders[idx];
+            final sTime = order['scheduled_time'];
+            if (sTime != null && sTime.toString().trim().isNotEmpty) {
+              try {
+                final scheduledDate = DateTime.parse(sTime.toString()).toUtc();
+                if (scheduledDate.difference(nowTs).inMinutes > 60) {
+                  targetTab = 2; // Scheduled tab
+                }
+              } catch (_) {}
+            }
+            _orders[idx] = Map<String, dynamic>.from(order)
+              ..['status'] = 'assigned'
+              ..['driver_id'] = user.id
+              ..['assigned_at'] = nowTs.toIso8601String()
+              ..['driver_name'] = driverName
+              ..['driver_photo'] = driverPhoto
+              ..['driver_vehicle'] = driverVehicle;
+          }
+          _activeFilterIndex = targetTab;
+        });
+      }
 
       // Log the acceptance event
       await DriverDatabaseService.instance.logDriverAction(
@@ -351,32 +416,36 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         NotificationService.notifyUserOrderAccepted(userId, orderId);
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Order accepted successfully!',
-                    style: TextStyle(color: Colors.white),
-                  ),
+      if (!mounted) return;
+
+      // Accept ho gaya — Assigned tab par switch karo
+      // Driver khud card tap karke details mein jayega aur wahan se navigate karega
+      setState(() => _activeFilterIndex = 1);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Order accepted! Tap it to start delivery.',
+                  style: TextStyle(color: Colors.white),
                 ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF4CAF50),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(20),
+              ),
+            ],
           ),
-        );
-      }
+          backgroundColor: const Color(0xFF4CAF50),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(20),
+        ),
+      );
     } catch (e) {
       // Roll back optimistic update on failure
       debugPrint('[Orders] Accept failed — rolling back optimistic update: $e');
-      await _fetchOrders(); // Refresh from DB to restore correct state
+      await _fetchOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: Colors.red, content: Text("Failed: $e")),
@@ -563,9 +632,15 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       final driverId = o['driver_id'];
       final myId = currentUser?.id;
 
+      // Treat null, empty string, and literal "null" as unclaimed
+      bool isUnclaimed() {
+        if (driverId == null) return true;
+        final s = driverId.toString().trim();
+        return s.isEmpty || s == 'null';
+      }
+
       bool isAvailableStatus() =>
-          (status == 'available' || status == 'pending') &&
-          driverId == null;
+          (status == 'available' || status == 'pending') && isUnclaimed();
 
       if (_activeFilterIndex == 0) {
         if (!isAvailableStatus()) return false;
@@ -698,8 +773,13 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         final order = filteredOrders[index];
         final statusLow = order['status']?.toString().toLowerCase() ?? '';
         final isEmergencyOrder = statusLow == 'emergency';
-        final isAvailable = (statusLow == 'available' || statusLow == 'pending') &&
-            (order['driver_id'] == null || order['driver_id'] == '');
+        // Treat null, empty string, and literal "null" as unclaimed
+        final rawDriver = order['driver_id'];
+        final driverIsNull = rawDriver == null ||
+            rawDriver.toString().trim().isEmpty ||
+            rawDriver.toString().trim() == 'null';
+        final isAvailable =
+            (statusLow == 'available' || statusLow == 'pending') && driverIsNull;
 
         String formattedTime = '--:--';
         final schTime = order['scheduled_time'];
@@ -785,10 +865,14 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     final shortId = '#ORD-${id.substring(0, 4).toUpperCase()}';
     
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => OrderDetailsScreen(order: fullDataMap),
+      // Available orders: card tap disabled — driver must use the Accept button.
+      // Assigned/Emergency orders: tap opens order details.
+      onTap: isAvailable
+          ? null
+          : () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => OrderDetailsScreen(order: fullDataMap),
           ),
         );
       },
@@ -898,6 +982,39 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                       ),
                     ],
                   ),
+                  // ── Customer Notes (show only if present) ─────────────
+                  Builder(builder: (_) {
+                    final notes = fullDataMap['notes']?.toString().trim() ?? '';
+                    if (notes.isEmpty) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(top: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF8E1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFFE082)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.sticky_note_2_outlined,
+                              color: Color(0xFFF59E0B), size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              notes,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF78350F),
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 16),
                   const Divider(height: 1, color: Color(0xFFF2F2F2)),
                   const SizedBox(height: 16),
@@ -941,60 +1058,148 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        height: 40,
-                        width: isAvailable ? 110 : (tag == 'COMPLETED' ? 110 : 130),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (isAvailable) {
-                              _acceptOrder(id);
-                            } else {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => OrderDetailsScreen(order: fullDataMap),
-                                ),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isAvailable || isEmergency
-                                ? const Color(0xFFFF4D00)
-                                : const Color(0xFFAAAAAA),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                      if (isEmergency) ...[
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 40,
+                          width: 80,
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    OrderDetailsScreen(order: fullDataMap),
+                              ),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                                if (isAvailable) ...[
-                                  const Text(
-                                    'ACCEPT',
-                                    style: TextStyle(fontWeight: FontWeight.w800),
-                                  ),
-                                ] else if (isEmergency) ...[
-                                  const Icon(Icons.explore, size: 18),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'GO',
-                                    style: TextStyle(fontWeight: FontWeight.w800),
-                                  ),
-                                ] else ...[
-                                  const Text(
-                                    'Details',
-                                    style: TextStyle(fontWeight: FontWeight.w800),
-                                  ),
-                                ],
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF4D00),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.explore, size: 18),
+                                SizedBox(width: 4),
+                                Text('GO',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w800)),
                               ],
                             ),
                           ),
                         ),
+                      ] else if (!isAvailable) ...[
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 40,
+                          width: 100,
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    OrderDetailsScreen(order: fullDataMap),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                  color: Color(0xFFDDDDDD)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text(
+                              'Details',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF666666),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+
+                  // ── Green Accept Order button (available orders only) ──
+                  if (isAvailable) ...[
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _acceptingOrderId == id
+                            ? null
+                            : _acceptingOrderId != null
+                                ? null
+                                : () async {
+                                    setState(
+                                        () => _acceptingOrderId = id);
+                                    await _acceptOrder(id);
+                                    if (mounted) {
+                                      setState(
+                                          () => _acceptingOrderId = null);
+                                    }
+                                  },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _acceptingOrderId == id
+                              ? const Color(0xFF81C784)
+                              : const Color(0xFF2E7D32),
+                          disabledBackgroundColor:
+                              const Color(0xFF81C784),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: _acceptingOrderId == id
+                            ? const Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2.5,
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Accepting…',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : const Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 20,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Accept Order',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1004,3 +1209,4 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     );
   }
 }
+

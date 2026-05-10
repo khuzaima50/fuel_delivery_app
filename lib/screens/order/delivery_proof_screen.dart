@@ -1,33 +1,37 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'safety_compliance_screen.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DeliveryProofScreen — main screen (image_picker REMOVED)
+// ─────────────────────────────────────────────────────────────────────────────
 class DeliveryProofScreen extends StatefulWidget {
   final Map<String, dynamic>? order;
   const DeliveryProofScreen({super.key, this.order});
-
   @override
   State<DeliveryProofScreen> createState() => _DeliveryProofScreenState();
 }
 
-class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
+class _DeliveryProofScreenState extends State<DeliveryProofScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final TextEditingController _gallonsController = TextEditingController();
   final FocusNode _gallonsFocus = FocusNode();
   double _estimatedTotal = 0.00;
   late final double _pricePerGallon;
 
   // Photo state
-  File? _localImage;         // shown as preview immediately
-  String? _meterPhotoUrl;    // Supabase Storage public URL (set after upload)
+  File? _localImage;
+  String? _meterPhotoUrl;
   bool _isUploading = false;
 
   @override
   void initState() {
     super.initState();
-
-    // ── Resolve price per gallon ───────────────────────────────────────────
     final requestedTotal =
         double.tryParse(widget.order?['total_amount']?.toString() ?? '') ?? 0.0;
     final requestedQty = double.tryParse(
@@ -37,7 +41,6 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
               '',
         ) ??
         0.0;
-
     if (requestedTotal > 0 && requestedQty > 0) {
       _pricePerGallon =
           double.parse((requestedTotal / requestedQty).toStringAsFixed(4));
@@ -47,7 +50,6 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
           double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
           4.85;
     }
-
     _gallonsController.addListener(_calculateTotal);
     _gallonsFocus.addListener(() => setState(() {}));
   }
@@ -62,72 +64,77 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
 
   void _calculateTotal() {
     final gallons = double.tryParse(_gallonsController.text) ?? 0.0;
-    setState(() {
-      _estimatedTotal = gallons * _pricePerGallon;
-    });
+    if (mounted) setState(() => _estimatedTotal = gallons * _pricePerGallon);
   }
 
-  // ── Take photo → upload → set URL ────────────────────────────────────────
-  Future<void> _pickAndUploadPhoto() async {
+  // ── Open in-app camera, get back a File, then upload ────────────────────
+  Future<void> _openCameraAndUpload() async {
+    // Navigate to in-app camera — returns File path or null
+    final String? imagePath = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const _InAppCameraScreen(),
+      ),
+    );
+
+    // Strict null guard
+    if (imagePath == null || imagePath.isEmpty) return;
+
+    final file = File(imagePath);
+    // Verify file actually exists before using it to prevent red screen
+    if (!file.existsSync()) return;
+
+    // State protection
+    if (!mounted) return;
+
+    setState(() {
+      _localImage = file;
+      _meterPhotoUrl = null;
+      _isUploading = true;
+    });
+
     try {
-      final picker = ImagePicker();
-      final XFile? picked = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-        preferredCameraDevice: CameraDevice.rear,
-      );
-      if (picked == null) return; // driver cancelled
-
-      final file = File(picked.path);
-      setState(() {
-        _localImage = file;   // show preview immediately
-        _meterPhotoUrl = null; // reset old URL while we upload
-        _isUploading = true;
-      });
-
-      // Upload to Supabase Storage bucket "delivery-proofs"
-      final fileExt = picked.path.split('.').last;
-      final fileName =
-          'meter_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+      final fileExt = imagePath.split('.').last;
+      final fileName = 'meter_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
       final storagePath = 'meter_readings/$fileName';
 
       await Supabase.instance.client.storage
           .from('delivery-proofs')
           .upload(storagePath, file);
 
+      if (!mounted) return;
+
       final publicUrl = Supabase.instance.client.storage
           .from('delivery-proofs')
           .getPublicUrl(storagePath);
 
-      if (mounted) {
-        setState(() {
-          _meterPhotoUrl = publicUrl;
-          _isUploading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Photo uploaded successfully ✅'),
-            backgroundColor: Color(0xFF4CAF50),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      setState(() {
+        _meterPhotoUrl = publicUrl;
+        _isUploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Photo uploaded successfully ✅'),
+          backgroundColor: Color(0xFF4CAF50),
+          duration: Duration(seconds: 2),
+        ),
+      );
     } catch (e) {
       debugPrint('[DeliveryProof] Upload error: $e');
-      if (mounted) {
-        setState(() => _isUploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Upload failed: ${e.toString().split(']').last}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _isUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: ${e.toString().split(']').last}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final bool hasValue = (double.tryParse(_gallonsController.text) ?? 0.0) > 0;
     final bool photoReady = _meterPhotoUrl != null && !_isUploading;
     final bool canProceed = photoReady && hasValue;
@@ -152,11 +159,8 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
               ],
             ),
             child: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new,
-                color: Colors.black,
-                size: 18,
-              ),
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.black, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -164,10 +168,9 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
         title: const Text(
           'Delivery Proof',
           style: TextStyle(
-            color: Color(0xFF1F1F1F),
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
+              color: Color(0xFF1F1F1F),
+              fontSize: 18,
+              fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
       ),
@@ -177,41 +180,32 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Dispensing Complete',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF333333),
-                ),
-              ),
+              const Text('Dispensing Complete',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF333333))),
               const SizedBox(height: 8),
               const Text(
                 'Capture the fuel meter and enter the delivered gallons to complete the order.',
                 style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF888888),
-                  height: 1.5,
-                  fontWeight: FontWeight.w500,
-                ),
+                    fontSize: 13,
+                    color: Color(0xFF888888),
+                    height: 1.5,
+                    fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 24),
-
-              // ── Section label ──────────────────────────────────────────
-              const Text(
-                'METER GAUGE PHOTO',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF888888),
-                  letterSpacing: 0.5,
-                ),
-              ),
+              const Text('METER GAUGE PHOTO',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF888888),
+                      letterSpacing: 0.5)),
               const SizedBox(height: 12),
 
-              // ── Photo capture widget ───────────────────────────────────
+              // ── Photo capture widget ──────────────────────────────────
               GestureDetector(
-                onTap: _isUploading ? null : _pickAndUploadPhoto,
+                onTap: _isUploading ? null : _openCameraAndUpload,
                 child: Container(
                   width: double.infinity,
                   height: 200,
@@ -234,43 +228,30 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // Retake button (shows after a photo is taken)
               if (_localImage != null && !_isUploading)
                 TextButton.icon(
-                  onPressed: _pickAndUploadPhoto,
+                  onPressed: _openCameraAndUpload,
                   icon: const Icon(Icons.refresh_rounded,
                       size: 16, color: Color(0xFFFF4D00)),
-                  label: const Text(
-                    'Retake Photo',
-                    style: TextStyle(
-                      color: Color(0xFFFF4D00),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
+                  label: const Text('Retake Photo',
+                      style: TextStyle(
+                          color: Color(0xFFFF4D00),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
                 ),
-
               const SizedBox(height: 20),
-
-              // ── Manual Entry label ─────────────────────────────────────
-              const Text(
-                'MANUAL ENTRY',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF888888),
-                  letterSpacing: 0.5,
-                ),
-              ),
+              const Text('MANUAL ENTRY',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF888888),
+                      letterSpacing: 0.5)),
               const SizedBox(height: 12),
 
-              // ── Gallons input ──────────────────────────────────────────
+              // ── Gallons input ─────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                    horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -282,104 +263,88 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.gas_meter_rounded,
-                      color: hasValue
-                          ? const Color(0xFFFF4D00)
-                          : const Color(0xFFD0D7DE),
-                      size: 24,
-                    ),
+                    Icon(Icons.gas_meter_rounded,
+                        color: hasValue
+                            ? const Color(0xFFFF4D00)
+                            : const Color(0xFFD0D7DE),
+                        size: 24),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextField(
                         controller: _gallonsController,
                         focusNode: _gallonsFocus,
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: hasValue
-                              ? const Color(0xFF1F1F1F)
-                              : const Color(0xFF888888),
-                        ),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: hasValue
+                                ? const Color(0xFF1F1F1F)
+                                : const Color(0xFF888888)),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         decoration: const InputDecoration(
                           border: InputBorder.none,
                           hintText: '0.00',
                           hintStyle: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFFD0D7DE),
-                          ),
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFD0D7DE)),
                           isDense: true,
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
                     ),
-                    Text(
-                      'GALLONS',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: hasValue
-                            ? const Color(0xFF888888)
-                            : const Color(0xFFD0D7DE),
-                      ),
-                    ),
+                    Text('GALLONS',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: hasValue
+                                ? const Color(0xFF888888)
+                                : const Color(0xFFD0D7DE))),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
-              // ── Estimated Total card ───────────────────────────────────
+              // ── Estimated Total ───────────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFEEEEEE)),
-                ),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: const Color(0xFFEEEEEE))),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Estimated Total',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF555555),
-                          ),
-                        ),
+                        const Text('Estimated Total',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF555555))),
                         const SizedBox(height: 4),
                         Text(
-                          'at \$${_pricePerGallon.toStringAsFixed(2)} / gal',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF9CB0C3),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                            'at \$${_pricePerGallon.toStringAsFixed(2)} / gal',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF9CB0C3),
+                                fontWeight: FontWeight.w600)),
                       ],
                     ),
-                    Text(
-                      '\$${_estimatedTotal.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: hasValue
-                            ? const Color(0xFFFF4D00)
-                            : const Color(0xFFF2F2F2),
-                      ),
-                    ),
+                    Text('\$${_estimatedTotal.toStringAsFixed(2)}',
+                        style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: hasValue
+                                ? const Color(0xFFFF4D00)
+                                : const Color(0xFFF2F2F2))),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // ── Required steps checklist ───────────────────────────────
               _buildRequirementRow(
                 done: photoReady,
                 loading: _isUploading,
@@ -398,32 +363,27 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── Compliance note ────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF4ED),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFE8DD)),
-                ),
+                    color: const Color(0xFFFFF4ED),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: const Color(0xFFFFE8DD))),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: Color(0xFFFF4D00),
-                      size: 16,
-                    ),
+                    Icon(Icons.info_outline_rounded,
+                        color: Color(0xFFFF4D00), size: 16),
                     SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         'Manual entries are flagged for supervisor review. Ensure the photo clearly shows the meter digits matching the entered quantity.',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFFF4D00),
-                          height: 1.5,
-                          fontWeight: FontWeight.w600,
-                        ),
+                            fontSize: 11,
+                            color: Color(0xFFFF4D00),
+                            height: 1.5,
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -442,10 +402,9 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
           height: 58,
           child: ElevatedButton(
             onPressed: canProceed
-                ? () {
-                    Navigator.of(context).push(
+                ? () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => SafetyComplianceScreen(
+                        builder: (_) => SafetyComplianceScreen(
                           meterPhotoUrl: _meterPhotoUrl,
                           deliveredGallons:
                               double.tryParse(_gallonsController.text) ?? 0.0,
@@ -454,8 +413,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                           order: widget.order,
                         ),
                       ),
-                    );
-                  }
+                    )
                 : () {
                     final msg = _isUploading
                         ? 'Please wait for the photo to finish uploading.'
@@ -463,28 +421,25 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                             ? 'Please take a photo of the fuel meter first.'
                             : 'Please enter the delivered gallons.';
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(msg),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                        SnackBar(
+                            content: Text(msg),
+                            backgroundColor: Colors.red));
                   },
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  canProceed ? const Color(0xFFFF4D00) : const Color(0xFFCCCCCC),
+              backgroundColor: canProceed
+                  ? const Color(0xFFFF4D00)
+                  : const Color(0xFFCCCCCC),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+                  borderRadius: BorderRadius.circular(12)),
               elevation: 0,
             ),
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Text(
-                  'Complete Order',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-                ),
+              children: [
+                Text('Complete Order',
+                    style: TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w800)),
                 SizedBox(width: 8),
                 Icon(Icons.arrow_forward_rounded, size: 22),
               ],
@@ -495,55 +450,53 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
     );
   }
 
-  // ── Photo area widget ────────────────────────────────────────────────────
   Widget _buildPhotoWidget(bool photoReady) {
-    if (_isUploading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Color(0xFFFF4D00)),
-            SizedBox(height: 16),
-            Text(
-              'Uploading…',
-              style: TextStyle(
-                color: Color(0xFFFF4D00),
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     if (_localImage != null) {
       return Stack(
         fit: StackFit.expand,
         children: [
-          Image.file(_localImage!, fit: BoxFit.cover),
-          // Green overlay when upload done
-          if (photoReady)
+          Image.file(
+            _localImage!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const Center(
+                child: Text('Waiting for image...', style: TextStyle(color: Color(0xFF888888))),
+              );
+            },
+          ),
+          if (_isUploading)
+            Container(
+              color: Colors.black.withValues(alpha: 0.5),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text('Uploading…',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14)),
+                  ],
+                ),
+              ),
+            )
+          else if (photoReady)
             Container(
               color: Colors.black.withValues(alpha: 0.35),
               child: const Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.check_circle_rounded,
-                      color: Color(0xFF4CAF50),
-                      size: 52,
-                    ),
+                    Icon(Icons.check_circle_rounded,
+                        color: Color(0xFF4CAF50), size: 52),
                     SizedBox(height: 8),
-                    Text(
-                      'Photo Saved',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
-                    ),
+                    Text('Photo Saved',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15)),
                   ],
                 ),
               ),
@@ -552,38 +505,42 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
       );
     }
 
-    // Empty state
-    return Column(
+    if (_isUploading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Color(0xFFFF4D00)),
+            SizedBox(height: 16),
+            Text('Waiting for image...',
+                style: TextStyle(
+                    color: Color(0xFFFF4D00),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14)),
+          ],
+        ),
+      );
+    }
+    return const Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: const [
-        Icon(
-          Icons.camera_alt_rounded,
-          color: Color(0xFFAAAAAA),
-          size: 40,
-        ),
+      children: [
+        Icon(Icons.camera_alt_rounded, color: Color(0xFFAAAAAA), size: 40),
         SizedBox(height: 12),
-        Text(
-          'Tap to take meter photo',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF888888),
-          ),
-        ),
+        Text('Tap to take meter photo',
+            style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF888888))),
         SizedBox(height: 6),
-        Text(
-          'Ensure the final digits are clearly visible',
-          style: TextStyle(
-            fontSize: 12,
-            color: Color(0xFFAAAAAA),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text('Ensure the final digits are clearly visible',
+            style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFFAAAAAA),
+                fontWeight: FontWeight.w500)),
       ],
     );
   }
 
-  // ── Requirement row ──────────────────────────────────────────────────────
   Widget _buildRequirementRow({
     required bool done,
     required String label,
@@ -608,43 +565,268 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: Colors.white),
                 )
-              : Icon(
-                  done ? Icons.check : Icons.circle_outlined,
+              : Icon(done ? Icons.check : Icons.circle_outlined,
                   size: 14,
-                  color: done ? Colors.white : const Color(0xFFCCCCCC),
-                ),
+                  color: done ? Colors.white : const Color(0xFFCCCCCC)),
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: done
-                  ? const Color(0xFF4CAF50)
-                  : loading
-                      ? const Color(0xFFFF9800)
-                      : const Color(0xFF888888),
-            ),
-          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: done
+                      ? const Color(0xFF4CAF50)
+                      : loading
+                          ? const Color(0xFFFF9800)
+                          : const Color(0xFF888888))),
         ),
       ],
     );
   }
 }
 
-// ── Dashed border painter (kept for any other usages) ──────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// _InAppCameraScreen — full-screen in-app camera, no external intent.
+// Pops with the captured image path (String) or null if cancelled.
+// ─────────────────────────────────────────────────────────────────────────────
+class _InAppCameraScreen extends StatefulWidget {
+  const _InAppCameraScreen();
+  @override
+  State<_InAppCameraScreen> createState() => _InAppCameraScreenState();
+}
+
+class _InAppCameraScreenState extends State<_InAppCameraScreen>
+    with WidgetsBindingObserver {
+  CameraController? _controller;
+  bool _isReady = false;
+  bool _isTakingPicture = false;
+  bool _isPopping = false; // True once we are navigating away — blocks any further build/setState
+  int _initToken = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    debugPrint('[CAMERA_DEBUG] initState called');
+    _initCamera();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    debugPrint('[CAMERA_DEBUG] dispose called');
+    final ctrl = _controller;
+    _controller = null;
+    ctrl?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('[CAMERA_DEBUG] Lifecycle state changed to: $state');
+    if (state == AppLifecycleState.inactive) {
+      debugPrint('[CAMERA_DEBUG] Inactive -> disposing controller safely');
+      final ctrl = _controller;
+      _controller = null;
+      if (mounted) setState(() => _isReady = false);
+      ctrl?.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      debugPrint('[CAMERA_DEBUG] Resumed -> reinitializing camera');
+      _initCamera();
+    }
+  }
+
+  Future<void> _initCamera() async {
+    final token = ++_initToken;
+    debugPrint('[CAMERA_DEBUG] _initCamera started with token $token');
+
+    try {
+      if (mounted) setState(() => _isReady = false);
+
+      if (_controller != null) {
+        debugPrint('[CAMERA_DEBUG] Disposing old controller before re-init');
+        await _controller!.dispose();
+        _controller = null;
+      }
+
+      debugPrint('[CAMERA_DEBUG] Calling availableCameras()');
+      final cameras = await availableCameras();
+      debugPrint('[CAMERA_DEBUG] availableCameras() returned ${cameras.length} cameras');
+      
+      if (!mounted || token != _initToken) {
+         debugPrint('[CAMERA_DEBUG] Aborting init (token mismatch or unmounted)');
+         return;
+      }
+
+      if (cameras.isEmpty) {
+         debugPrint('[CAMERA_DEBUG] No cameras available!');
+         return;
+      }
+
+      // Find back camera
+      CameraDescription? selectedCamera;
+      for (final c in cameras) {
+        if (c.lensDirection == CameraLensDirection.back) {
+          selectedCamera = c;
+          break;
+        }
+      }
+      // Fallback if no back camera found
+      selectedCamera ??= cameras[0];
+
+      debugPrint('[CAMERA_DEBUG] Selected camera: ${selectedCamera.name}');
+      debugPrint('[CAMERA_DEBUG] Lens direction: ${selectedCamera.lensDirection}');
+      debugPrint('[CAMERA_DEBUG] Sensor orientation: ${selectedCamera.sensorOrientation}');
+
+      debugPrint('[CAMERA_DEBUG] Creating CameraController instance');
+      final ctrl = CameraController(
+        selectedCamera,
+        ResolutionPreset.low, // Forced safe Android config
+        enableAudio: false,
+      );
+      
+      debugPrint('[CAMERA_DEBUG] Calling ctrl.initialize()');
+      // Add timeout protection
+      await ctrl.initialize().timeout(const Duration(seconds: 10), onTimeout: () {
+        debugPrint('[CAMERA_DEBUG] Timeout during initialize()!');
+        throw Exception('Camera initialization timed out after 10 seconds');
+      });
+      
+      debugPrint('[CAMERA_DEBUG] ctrl.initialize() success!');
+
+      if (!mounted || token != _initToken) {
+        debugPrint('[CAMERA_DEBUG] Aborting after init (token mismatch or unmounted)');
+        ctrl.dispose();
+        return;
+      }
+      
+      _controller = ctrl;
+      setState(() => _isReady = true);
+      debugPrint('[CAMERA_DEBUG] UI updated to show preview.');
+    } on CameraException catch (e) {
+      debugPrint('[CAMERA_DEBUG] CameraException code: ${e.code}');
+      debugPrint('[CAMERA_DEBUG] CameraException description: ${e.description}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Camera error: ${e.code}')));
+      }
+    } catch (e) {
+      debugPrint('[CAMERA_DEBUG] General init error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Init error: $e')));
+      }
+    }
+  }
+
+  Future<void> _capture() async {
+    final ctrl = _controller;
+    if (ctrl == null) {
+       debugPrint('[CAMERA_DEBUG] Capture ignored: controller is null');
+       return;
+    }
+    if (!ctrl.value.isInitialized) {
+       debugPrint('[CAMERA_DEBUG] Capture ignored: not initialized');
+       return;
+    }
+    if (_isTakingPicture || _isPopping) {
+       debugPrint('[CAMERA_DEBUG] Capture ignored: already taking picture or popping');
+       return;
+    }
+
+    if (mounted) setState(() => _isTakingPicture = true);
+    debugPrint('[CAMERA_DEBUG] Starting capture sequence');
+
+    try {
+      final XFile image = await ctrl.takePicture();
+      debugPrint('[CAMERA_DEBUG] Picture captured: ${image.path}');
+
+      if (!mounted) {
+         debugPrint('[CAMERA_DEBUG] Component unmounted after takePicture');
+         return;
+      }
+
+      // Set _isPopping BEFORE pop so that the final build() triggered by
+      // Navigator does NOT attempt to render CameraPreview on a disposed controller.
+      // The controller is NOT disposed here — widget.dispose() handles that cleanly.
+      setState(() => _isPopping = true);
+
+      debugPrint('[CAMERA_DEBUG] Navigator pop with image path');
+      Navigator.of(context).pop(image.path);
+    } catch (e) {
+      debugPrint('[CAMERA_DEBUG] Capture error: $e');
+      if (mounted) {
+        setState(() {
+          _isTakingPicture = false;
+          _isPopping = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Capture failed. Try again.'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('DEBUG CAMERA'),
+        backgroundColor: Colors.blueGrey,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: _buildBody(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: (_isReady && !_isTakingPicture) ? _capture : null,
+        backgroundColor: (_isReady && !_isTakingPicture) ? Colors.red : Colors.grey,
+        child: _isTakingPicture 
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Icon(Icons.camera_alt),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  Widget _buildBody() {
+    // CRITICAL: If we are navigating away or capturing, show a safe black screen.
+    // Never render CameraPreview when the controller may be in a disposed/intermediate state.
+    if (_isPopping || _isTakingPicture) {
+      debugPrint('[CAMERA_DEBUG] build: showing black screen (popping=$_isPopping, taking=$_isTakingPicture)');
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
+    }
+
+    final ctrl = _controller;
+    if (!_isReady || ctrl == null) {
+       debugPrint('[CAMERA_DEBUG] build: rendering loading indicator (not ready)');
+       return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (!ctrl.value.isInitialized) {
+       debugPrint('[CAMERA_DEBUG] build: isInitialized is false — showing safe fallback');
+       return const ColoredBox(
+         color: Colors.black,
+         child: Center(child: CircularProgressIndicator(color: Colors.white)),
+       );
+    }
+    debugPrint('[CAMERA_DEBUG] build: Rendering CameraPreview');
+    return Center(
+      child: CameraPreview(ctrl),
+    );
+  }
+}
+
+// ── DashedRectPainter kept for any other usages ──────────────────────────────
 class DashedRectPainter extends CustomPainter {
   final Color color;
   final double strokeWidth;
   final double gap;
-
-  DashedRectPainter({
-    required this.color,
-    this.strokeWidth = 1.0,
-    this.gap = 5.0,
-  });
+  DashedRectPainter(
+      {required this.color, this.strokeWidth = 1.0, this.gap = 5.0});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -652,31 +834,23 @@ class DashedRectPainter extends CustomPainter {
       ..color = color
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke;
-
-    final path = Path();
-    path.addRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, size.height),
-        const Radius.circular(16),
-      ),
-    );
-
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, size.width, size.height),
+          const Radius.circular(16)));
     final dashPath = Path();
     double distance = 0.0;
     for (final metric in path.computeMetrics()) {
       while (distance < metric.length) {
         dashPath.addPath(
-          metric.extractPath(distance, distance + gap),
-          Offset.zero,
-        );
+            metric.extractPath(distance, distance + gap), Offset.zero);
         distance += gap * 2;
       }
       distance = 0.0;
     }
-
     canvas.drawPath(dashPath, paint);
   }
 
   @override
-  bool shouldRepaint(DashedRectPainter oldDelegate) => false;
+  bool shouldRepaint(DashedRectPainter old) => false;
 }

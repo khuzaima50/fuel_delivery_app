@@ -12,22 +12,43 @@ class MeterVerificationScreen extends StatefulWidget {
       _MeterVerificationScreenState();
 }
 
-class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
+class _MeterVerificationScreenState extends State<MeterVerificationScreen>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
+
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isReady = false;
   bool _isTakingPicture = false;
   bool _flashOn = false;
 
+  // Keep this widget alive when Android brings the camera activity to foreground
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When returning from the camera preview / system camera UI,
+    // the CameraController can become invalid. Re-init it on resume.
+    if (state == AppLifecycleState.inactive) {
+      _controller?.dispose();
+      _controller = null;
+      if (mounted) setState(() => _isReady = false);
+    } else if (state == AppLifecycleState.resumed) {
+      _initializeCamera();
+    }
   }
 
   Future<void> _initializeCamera() async {
     try {
       _cameras = await availableCameras();
+      if (!mounted) return; // ← guard after async gap
       if (_cameras != null && _cameras!.isNotEmpty) {
         _controller = CameraController(
           _cameras![0],
@@ -37,26 +58,26 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
         );
 
         await _controller!.initialize();
-        if (!mounted) return;
+        if (!mounted) return; // ← guard after async gap
         setState(() {
           _isReady = true;
         });
       }
     } catch (e) {
       debugPrint('Error initializing camera: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Camera error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Camera error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     super.dispose();
   }
@@ -80,7 +101,7 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
       return;
     }
 
-    setState(() => _isTakingPicture = true);
+    if (mounted) setState(() => _isTakingPicture = true);
 
     try {
       // Turn off torch before capturing to avoid overexposure
@@ -90,7 +111,14 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
 
       final XFile image = await _controller!.takePicture();
 
-      if (!mounted) return;
+      // Release the camera BEFORE pushing the preview screen.
+      // This prevents Android from killing/restarting the activity due to
+      // competing camera resource ownership between Flutter and the OS.
+      await _controller?.dispose();
+      _controller = null;
+      if (mounted) setState(() => _isReady = false);
+
+      if (!mounted) return; // ← guard after async gap
       final result = await Navigator.of(context).push<String>(
         MaterialPageRoute(
           builder: (context) => MeterPreviewScreen(
@@ -101,19 +129,20 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
         ),
       );
 
-      if (result != null && mounted) {
+      if (!mounted) return; // ← guard after returning from preview
+      if (result != null) {
         Navigator.of(context).pop(result);
       }
+      // Camera will be re-initialized by didChangeAppLifecycleState → resumed
     } catch (e) {
       debugPrint('Error taking picture: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to take photo. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to take photo. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isTakingPicture = false);
@@ -123,6 +152,7 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required by AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(

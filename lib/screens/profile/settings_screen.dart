@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../auth/login_screen.dart';
+import '../dashboard/dashboard_screen.dart';
 import 'language_screen.dart';
 import 'help_center_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -140,288 +141,301 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new,
-                color: Colors.black,
-                size: 18,
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-        ),
-        title: const Text(
-          'Settings',
-          style: TextStyle(
-            color: Color(0xFF1F1F1F),
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Profile Section
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: _isUploading ? null : _uploadProfilePicture,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 35,
-                          backgroundImage: NetworkImage(
-                            _profileImageUrl != null && _profileImageUrl!.isNotEmpty
-                                ? _profileImageUrl!
-                                : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=1974&auto=format&fit=crop',
-                          ),
-                          backgroundColor: const Color(0xFFEEEEEE),
-                        ),
-                        if (_isUploading)
-                          const CircularProgressIndicator(color: Color(0xFFFF4D00)),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFF4D00),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _driverName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1F1F1F),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Fuel Delivery Partner',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF888888),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          'ID: #$_driverId',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF888888),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFBFBFB),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
                   ),
                 ],
               ),
-
-              const SizedBox(height: 40),
-
-              const Text(
-                'APP PREFERENCES',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF888888),
-                  letterSpacing: 0.5,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.black,
+                  size: 18,
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              _buildSettingItem(
-                icon: Icons.language,
-                title: 'App Language',
-                onTap: () async {
-                  final newLang = await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => LanguageScreen(currentLanguage: _currentLanguageCode),
-                    ),
+                onPressed: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => const DashboardScreen()),
                   );
-                  if (newLang != null && newLang is String) {
-                    setState(() {
-                      _currentLanguageCode = newLang;
-                    });
-                  }
                 },
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+            ),
+          ),
+          title: const Text(
+            'Settings',
+            style: TextStyle(
+              color: Color(0xFF1F1F1F),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Profile Section
+                Row(
                   children: [
-                    Text(
-                      _getLanguageName(_currentLanguageCode),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFFBDBDBD),
-                        fontWeight: FontWeight.w500,
+                    GestureDetector(
+                      onTap: _isUploading ? null : _uploadProfilePicture,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircleAvatar(
+                            radius: 35,
+                            backgroundImage: NetworkImage(
+                              _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                                  ? _profileImageUrl!
+                                  : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=1974&auto=format&fit=crop',
+                            ),
+                            backgroundColor: const Color(0xFFEEEEEE),
+                          ),
+                          if (_isUploading)
+                            const CircularProgressIndicator(color: Color(0xFFFF4D00)),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF4D00),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.arrow_forward_ios,
-                      size: 14,
-                      color: Color(0xFFBDBDBD),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _driverName,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1F1F1F),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Fuel Delivery Partner',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF888888),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            'ID: #$_driverId',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF888888),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              _buildSettingItem(
-                icon: Icons.notifications_none_rounded,
-                title: 'Push Notifications',
-                trailing: Transform.scale(
-                  scale: 0.8,
-                  child: Switch(
-                    value: _pushNotifications,
-                    onChanged: (val) {
-                      setState(() => _pushNotifications = val);
-                      _updatePreference('push_notifications', val);
-                    },
-                    activeThumbColor: Colors.white,
-                    activeTrackColor: const Color(0xFFFF4D00),
+
+                const SizedBox(height: 40),
+
+                const Text(
+                  'APP PREFERENCES',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF888888),
+                    letterSpacing: 0.5,
                   ),
                 ),
-              ),
+                const SizedBox(height: 16),
 
-              const SizedBox(height: 32),
-
-              const Text(
-                'ACCOUNT & SUPPORT',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF888888),
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              _buildSettingItem(
-                icon: Icons.help_outline_rounded,
-                title: 'Help Center',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const HelpCenterScreen()),
-                  );
-                },
-                trailing: const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Color(0xFFBDBDBD),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildSettingItem(
-                icon: Icons.shield_outlined,
-                title: 'Privacy Policy',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
-                  );
-                },
-                trailing: const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Color(0xFFBDBDBD),
-                ),
-              ),
-
-              const SizedBox(height: 48),
-
-              // Log Out Button
-              Container(
-                width: double.infinity,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF2F2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFE0E0)),
-                ),
-                child: InkWell(
+                _buildSettingItem(
+                  icon: Icons.language,
+                  title: 'App Language',
                   onTap: () async {
-                    try {
-                      await Supabase.instance.client.auth.signOut();
-                      if (context.mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (context) => const LoginScreen(),
-                          ),
-                          (route) => false,
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Failed to log out. Please try again.')),
-                        );
-                      }
+                    final newLang = await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => LanguageScreen(currentLanguage: _currentLanguageCode),
+                      ),
+                    );
+                    if (newLang != null && newLang is String) {
+                      setState(() {
+                        _currentLanguageCode = newLang;
+                      });
                     }
                   },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(
-                        Icons.logout_rounded,
-                        color: Color(0xFFFF4D4D),
-                        size: 20,
-                      ),
-                      SizedBox(width: 12),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        'Log Out',
-                        style: TextStyle(
-                          color: Color(0xFFFF4D4D),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                        _getLanguageName(_currentLanguageCode),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFFBDBDBD),
+                          fontWeight: FontWeight.w500,
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: Color(0xFFBDBDBD),
                       ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 120),
-            ],
+                const SizedBox(height: 12),
+                _buildSettingItem(
+                  icon: Icons.notifications_none_rounded,
+                  title: 'Push Notifications',
+                  trailing: Transform.scale(
+                    scale: 0.8,
+                    child: Switch(
+                      value: _pushNotifications,
+                      onChanged: (val) {
+                        setState(() => _pushNotifications = val);
+                        _updatePreference('push_notifications', val);
+                      },
+                      activeThumbColor: Colors.white,
+                      activeTrackColor: const Color(0xFFFF4D00),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                const Text(
+                  'ACCOUNT & SUPPORT',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF888888),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                _buildSettingItem(
+                  icon: Icons.help_outline_rounded,
+                  title: 'Help Center',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const HelpCenterScreen()),
+                    );
+                  },
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: Color(0xFFBDBDBD),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildSettingItem(
+                  icon: Icons.shield_outlined,
+                  title: 'Privacy Policy',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
+                    );
+                  },
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: Color(0xFFBDBDBD),
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Log Out Button
+                Container(
+                  width: double.infinity,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFFE0E0)),
+                  ),
+                  child: InkWell(
+                    onTap: () async {
+                      try {
+                        await Supabase.instance.client.auth.signOut();
+                        if (context.mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (context) => const LoginScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Failed to log out. Please try again.')),
+                          );
+                        }
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(
+                          Icons.logout_rounded,
+                          color: Color(0xFFFF4D4D),
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Log Out',
+                          style: TextStyle(
+                            color: Color(0xFFFF4D4D),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 120),
+              ],
+            ),
           ),
         ),
+        bottomNavigationBar: const FloatingBottomNavBar(currentIndex: 3),
       ),
-      bottomNavigationBar: const FloatingBottomNavBar(currentIndex: 3),
     );
   }
 

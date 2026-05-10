@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import '../../services/otp_service.dart';
 import '../../services/notification_service.dart';
@@ -7,11 +8,13 @@ import '../../services/notification_service.dart';
 class OtpVerificationScreen extends StatefulWidget {
   final String email;
   final Widget nextScreen;
+  final bool isRecovery;
 
   const OtpVerificationScreen({
     super.key, 
     required this.email, 
     required this.nextScreen,
+    this.isRecovery = false,
   });
 
   @override
@@ -74,13 +77,33 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
 
     setState(() => _isLoading = true);
-    bool success = await OtpService.verifyOtp(widget.email, otp);
+    
+    bool success = false;
+    
+    if (widget.isRecovery) {
+      try {
+        final res = await Supabase.instance.client.auth.verifyOTP(
+          email: widget.email,
+          token: otp,
+          type: OtpType.magiclink, // Use magiclink because we used signInWithOtp
+        );
+        success = res.session != null;
+      } catch (e) {
+        debugPrint('Recovery verification error: $e');
+        success = false;
+      }
+    } else {
+      success = await OtpService.verifyOtp(widget.email, otp);
+    }
+    
     setState(() => _isLoading = false);
 
     if (success) {
       if (mounted) {
-        // Sync notification token now that user is logged in
-        unawaited(NotificationService.syncToken());
+        if (!widget.isRecovery) {
+          // Sync notification token now that user is logged in
+          unawaited(NotificationService.syncToken());
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -88,9 +111,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => widget.nextScreen),
-        );
+        
+        if (widget.isRecovery) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => widget.nextScreen),
+          );
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => widget.nextScreen),
+            (route) => false,
+          );
+        }
       }
     } else {
       if (mounted) {
@@ -108,7 +139,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     if (!_canResend) return;
 
     setState(() => _isLoading = true);
-    bool sent = await OtpService.sendOtp(widget.email);
+    
+    bool sent = false;
+    if (widget.isRecovery) {
+      try {
+        await Supabase.instance.client.auth.signInWithOtp(
+          email: widget.email,
+          shouldCreateUser: false,
+        );
+        sent = true;
+      } catch (e) {
+        debugPrint('Resend recovery OTP error: $e');
+        sent = false;
+      }
+    } else {
+      sent = await OtpService.sendOtp(widget.email);
+    }
+    
     setState(() => _isLoading = false);
 
     if (sent) {

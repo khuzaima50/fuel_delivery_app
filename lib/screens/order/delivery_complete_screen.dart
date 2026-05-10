@@ -20,149 +20,164 @@ class DeliveryCompleteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new,
-                color: Colors.black,
-                size: 18,
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-        ),
-        title: const Text(
-          'Confirmation',
-          style: TextStyle(
-            color: Color(0xFF1F1F1F),
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 40),
-
-            // Success Icon (Scalloped Circle)
-            Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CustomPaint(
-                    size: const Size(100, 100),
-                    painter: ScallopedCirclePainter(),
-                  ),
-                  const Icon(Icons.check, color: Colors.white, size: 50),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 32),
-
-            const Text(
-              'Delivery Successful',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF1F1F1F),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Order #${orderId.toString().substring(0, 8).toUpperCase()} has been finalized',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF888888),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-
-            const SizedBox(height: 48),
-
-            // Delivery Summary Card
-            Container(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          (route) => false,
+        );
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFBFBFB),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
-                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 20,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.black,
+                  size: 18,
                 ),
-                child: Column(
-                  children: [
-                    _buildInfoRow('Quantity', '${deliveredGallons.toStringAsFixed(2)} Gal'),
-                    const SizedBox(height: 16),
-                    _buildInfoRow('Amount Earned', '\$${totalAmount.toStringAsFixed(2)}'),
-                    const SizedBox(height: 16),
-                    _buildInfoRow('Fuel Type', fuelType),
-                    const SizedBox(height: 16),
-                    _buildInfoRow('Location', address),
-                  ],
-                ),
-              ),
-            ),
-
-            const Spacer(),
-
-            // Ready for Next Task Button
-            SizedBox(
-              width: double.infinity,
-              height: 58,
-              child: ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                      builder: (context) => const DashboardScreen(),
-                    ),
+                    MaterialPageRoute(builder: (context) => const DashboardScreen()),
                     (route) => false,
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF4D00),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Ready for Next Task',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
               ),
             ),
-            const SizedBox(height: 20),
-          ],
+          ),
+          title: const Text(
+            'Confirmation',
+            style: TextStyle(
+              color: Color(0xFF1F1F1F),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+  
+              // Success Icon (Scalloped Circle)
+              Center(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(100, 100),
+                      painter: ScallopedCirclePainter(),
+                    ),
+                    const Icon(Icons.check, color: Colors.white, size: 50),
+                  ],
+                ),
+              ),
+  
+              const SizedBox(height: 32),
+  
+              const Text(
+                'Delivery Successful',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1F1F1F),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Order #${orderId.toString().substring(0, 8).toUpperCase()} has been finalized',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF888888),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+  
+              const SizedBox(height: 48),
+  
+              // Delivery Summary Card
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 20,
+                  ),
+                  child: Column(
+                    children: [
+                      _buildInfoRow('Quantity', '${deliveredGallons.toStringAsFixed(2)} Gal'),
+                      const SizedBox(height: 16),
+                      _buildInfoRow('Amount Earned', '\$${totalAmount.toStringAsFixed(2)}'),
+                      const SizedBox(height: 16),
+                      _buildInfoRow('Fuel Type', fuelType),
+                      const SizedBox(height: 16),
+                      _buildInfoRow('Location', address),
+                    ],
+                  ),
+                ),
+              ),
+  
+              const Spacer(),
+  
+              // Ready for Next Task Button
+              SizedBox(
+                width: double.infinity,
+                height: 58,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => const DashboardScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF4D00),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Ready for Next Task',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );

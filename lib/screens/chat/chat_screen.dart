@@ -276,15 +276,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     final msg = messages[index];
                     final prev =
                         index > 0 ? messages[index - 1] : null;
-                    final next = index < messages.length - 1
-                        ? messages[index + 1]
-                        : null;
 
                     final bool isMe = msg['sender_id'] == _myId;
                     final bool prevIsMe =
                         prev != null && prev['sender_id'] == _myId;
-                    final bool nextIsMe =
-                        next != null && next['sender_id'] == _myId;
 
                     // Show date separator when day changes
                     final showDateSep = prev == null ||
@@ -295,10 +290,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     final bool isGrouped = prev != null &&
                         !showDateSep &&
                         prevIsMe == isMe;
-                    final bool isLastInGroup = next == null ||
-                        nextIsMe != isMe ||
-                        !_sameDay(
-                            msg['created_at'], next['created_at']);
 
                     return Column(
                       children: [
@@ -308,7 +299,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           time: _formatTime(msg['created_at']),
                           isMe: isMe,
                           isGrouped: isGrouped,
-                          isLastInGroup: isLastInGroup,
                         ),
                       ],
                     );
@@ -465,149 +455,82 @@ class _ChatBubble extends StatelessWidget {
   final String time;
   final bool isMe;
   final bool isGrouped;
-  final bool isLastInGroup;
 
   const _ChatBubble({
     required this.message,
     required this.time,
     required this.isMe,
     required this.isGrouped,
-    required this.isLastInGroup,
   });
-
-  static const Color _sentBg = Color(0xFFFF4D00);
-  static const Color _receivedBg = Color(0xFFFFFFFF);
-  static const double _radius = 18;
-  static const double _tailRadius = 4;
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    // Avatar dimensions (received side only)
-    const double avatarWidth = 28;
-    const double avatarGap = 6;
-
-    // Maximum bubble width — leave room for avatar on received side
-    final double maxBubbleWidth = screenWidth * 0.70;
-
-    final bubble = Container(
-      constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-      margin: EdgeInsets.only(bottom: 2),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-      decoration: BoxDecoration(
-        color: isMe ? _sentBg : _receivedBg,
-        borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(_radius),
-          topRight: const Radius.circular(_radius),
-          bottomLeft: isMe
-              ? const Radius.circular(_radius)
-              : (isLastInGroup
-                  ? const Radius.circular(_tailRadius)
-                  : const Radius.circular(_radius)),
-          bottomRight: isMe
-              ? (isLastInGroup
-                  ? const Radius.circular(_tailRadius)
-                  : const Radius.circular(_radius))
-              : const Radius.circular(_radius),
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+        child: Container(
+          margin: EdgeInsets.only(
+            top: isGrouped ? 2.0 : 8.0,
+            bottom: 2.0,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Message text
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              message,
-              style: TextStyle(
-                color: isMe ? Colors.white : const Color(0xFF1C1C1C),
-                fontSize: 15,
-                height: 1.35,
-              ),
+          padding: const EdgeInsets.only(left: 10, right: 10, top: 8, bottom: 6),
+          decoration: BoxDecoration(
+            color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(12),
+              topRight: const Radius.circular(12),
+              bottomLeft: Radius.circular(isMe ? 12 : 0),
+              bottomRight: Radius.circular(isMe ? 0 : 12),
             ),
-          ),
-          const SizedBox(height: 4),
-          // Timestamp + tick
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                time,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isMe
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : const Color(0xFF999999),
-                  fontWeight: FontWeight.w500,
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
               ),
-              if (isMe) ...[
-                const SizedBox(width: 3),
-                Icon(
-                  Icons.done_all_rounded,
-                  size: 14,
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-              ],
             ],
           ),
-        ],
-      ),
-    );
-
-    if (isMe) {
-      // Sent: flush right with a small right margin, large left push
-      return Padding(
-        padding: EdgeInsets.only(
-          top: isGrouped ? 2 : 6,
-          left: 56, // min gap from left edge
-          right: 8,
-        ),
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: bubble,
-        ),
-      );
-    }
-
-    // Received: avatar + bubble, flush left
-    return Padding(
-      padding: EdgeInsets.only(
-        top: isGrouped ? 2 : 6,
-        left: 8,
-        right: 56, // min gap from right edge
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // Avatar slot — always takes up width to keep alignment consistent
-          SizedBox(
-            width: avatarWidth,
-            height: avatarWidth,
-            child: isLastInGroup
-                ? CircleAvatar(
-                    radius: avatarWidth / 2,
-                    backgroundColor:
-                        const Color(0xFFFF4D00).withValues(alpha: 0.15),
-                    child: const Icon(Icons.person,
-                        size: 16, color: Color(0xFFFF4D00)),
-                  )
-                : const SizedBox(),
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 15,
+                  height: 1.3,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      time,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    if (isMe) ...[
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.done_all,
+                        size: 14,
+                        color: Colors.blue,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: avatarGap),
-          // Bubble
-          bubble,
-        ],
+        ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_globals.dart';
+import '../screens/order/delivery_complete_screen.dart';
 
 /// Handles all push + in-app notification logic for the FuelDirect driver app.
 ///
@@ -252,6 +253,18 @@ class NotificationService {
     // User notification is now handled by SQL Trigger fn_notify_order_status_change
   }
 
+  /// Driver finished fueling → notify the customer to confirm receipt.
+  static void notifyUserAwaitingConfirmation(String userId, String orderId) {
+    debugPrint('[Notif] EVENT: Awaiting Confirmation → notifying user $userId');
+    unawaited(_sendNotification(
+      targetType: 'user',
+      targetId: userId,
+      title: 'Action Required: Confirm Delivery ⛽',
+      body: 'Your fuel delivery is ready! Please open the app to confirm receipt and complete the order.',
+      data: {'type': 'awaiting_confirmation', 'order_id': orderId},
+    ));
+  }
+
 
   /// Driver triggers emergency → notify the customer user.
   static void notifyUserEmergency(String userId, String orderId) {
@@ -309,6 +322,16 @@ class NotificationService {
     debugPrint('[Notif]   data: ${message.data}');
 
     final notification = message.notification;
+    // We check type regardless of whether there's a notification block
+    final type = message.data['type'] ?? 'system';
+    final orderId = message.data['order_id']?.toString();
+
+    if (type == 'order_completed' && orderId != null) {
+      debugPrint('[Notif] Foreground Order Completed detected! Auto-navigating...');
+      _navigateToDeliveryComplete(orderId);
+      return;
+    }
+
     if (notification == null) {
       debugPrint('[Notif] ⚠ Foreground message has no notification block — data-only message');
       return;
@@ -318,7 +341,6 @@ class NotificationService {
     _showLocalNotification(message);
 
     // Fallback: Save to DB locally if received in foreground
-    final type = message.data['type'] ?? 'system';
     unawaited(saveDriverNotification(
       title: notification.title ?? 'New Update',
       message: notification.body ?? '',
@@ -491,8 +513,50 @@ class NotificationService {
           'customerName': 'Customer',
         },
       );
+    } else if (type == 'order_completed' && orderId != null) {
+      _navigateToDeliveryComplete(orderId);
     } else if (type == 'order_update' || type == 'order_completed') {
       navigator.pushNamed('/assigned-orders');
+    }
+  }
+
+  /// Fetches order details and navigates to DeliveryCompleteScreen.
+  /// Used for both foreground and tapped notifications.
+  static Future<void> _navigateToDeliveryComplete(String orderId) async {
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+
+    try {
+      // Show a brief loading overlay if possible, or just fetch
+      final res = await Supabase.instance.client
+          .from('orders')
+          .select()
+          .eq('id', orderId)
+          .maybeSingle();
+
+      if (res != null) {
+        final double qty = (res['fuel_quantity'] ?? res['fuel_quantity_gallons'] ?? 0.0).toDouble();
+        final double earned = (res['driver_earning'] ?? res['total_amount'] ?? 0.0).toDouble();
+        
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => DeliveryCompleteScreen(
+              orderId: orderId,
+              deliveredGallons: qty,
+              totalAmount: earned,
+              fuelType: res['fuel_type'] ?? 'Fuel',
+              address: res['delivery_address'] ?? 'Customer Location',
+            ),
+          ),
+          (route) => false,
+        );
+      } else {
+        // Fallback if order not found
+        navigator.pushNamedAndRemoveUntil('/assigned-orders', (route) => false);
+      }
+    } catch (e) {
+      debugPrint('[Notif] Error in _navigateToDeliveryComplete: $e');
+      navigator.pushNamedAndRemoveUntil('/assigned-orders', (route) => false);
     }
   }
 }

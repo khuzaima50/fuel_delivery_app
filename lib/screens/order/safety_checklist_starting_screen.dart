@@ -164,7 +164,7 @@ class _SafetyChecklistStartingScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -466,21 +466,29 @@ class _SafetyChecklistStartingScreenState
                         const SizedBox(height: 12),
                         Builder(
                           builder: (context) {
-                            final instructions =
-                                widget.order?['special_instructions'];
-                            final hasInstructions = instructions != null &&
-                                instructions.toString().trim().isNotEmpty;
+                            // Check all notes fields — same priority as rest of app
+                            final instructions = (
+                              widget.order?['drop_off_instructions'] ??
+                              widget.order?['delivery_instructions'] ??
+                              widget.order?['customer_notes'] ??
+                              widget.order?['special_instructions'] ??
+                              widget.order?['notes']
+                            )?.toString().trim() ?? '';
+
+                            final hasInstructions = instructions.isNotEmpty;
                             return Text(
                               hasInstructions
-                                  ? instructions.toString()
+                                  ? instructions
                                   : 'No special instructions provided.',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: hasInstructions
-                                    ? const Color(0xFF888888)
+                                    ? const Color(0xFF333333)
                                     : const Color(0xFFAAAAAA),
                                 height: 1.5,
-                                fontWeight: FontWeight.w500,
+                                fontWeight: hasInstructions
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
                                 fontStyle: hasInstructions
                                     ? FontStyle.normal
                                     : FontStyle.italic,

@@ -61,6 +61,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
   double _distanceMiles = 0.0;
   int _estimatedMinutes = 0;
   String _etaTime = '--:--';
+  bool _isCalculating = true; // true until first route fetch completes
 
   // ── Destination (mutable — resolved async) ───────────────────────────────
   double? _destLat;
@@ -233,8 +234,17 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     if (dLat == null || dLng == null) return;
     final distM = Geolocator.distanceBetween(
         pos.latitude, pos.longitude, dLat, dLng);
-    final miles = distM / 1609.34;
-    final mins = math.max(1, (miles / 18.64 * 60.0).ceil());
+    _applyStats(distanceMeters: distM, durationSecs: null);
+  }
+
+  /// Core stats applier — called both from API response and from live GPS.
+  /// [durationSecs] comes from the Directions API (preferred).
+  /// If null, duration is estimated from speed (30 km/h average).
+  void _applyStats({required double distanceMeters, int? durationSecs}) {
+    final miles = distanceMeters / 1609.34;
+    final int mins = durationSecs != null
+        ? math.max(1, (durationSecs / 60).ceil())
+        : math.max(1, (miles / 18.64 * 60.0).ceil()); // 30 km/h fallback
     final arrival = DateTime.now().add(Duration(minutes: mins));
     final h = arrival.hour > 12
         ? arrival.hour - 12
@@ -243,6 +253,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     final ampm = arrival.hour >= 12 ? 'PM' : 'AM';
     if (mounted) {
       setState(() {
+        _isCalculating = false;
         _distanceMiles = miles;
         _estimatedMinutes = mins;
         _etaTime = '$h:$m $ampm';
@@ -329,6 +340,21 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
         return;
       }
 
+      // ── Extract duration + distance from legs ─────────────────────────
+      final legs = routes[0]['legs'] as List?;
+      int? apiDurationSecs;
+      double? apiDistanceMeters;
+      if (legs != null && legs.isNotEmpty) {
+        // Prefer duration_in_traffic if present (real-time traffic)
+        final leg = legs[0] as Map<String, dynamic>?;
+        apiDurationSecs = (leg?['duration_in_traffic']?['value'] as int?) ??
+            (leg?['duration']?['value'] as int?);
+        apiDistanceMeters =
+            ((leg?['distance']?['value']) as num?)?.toDouble();
+        debugPrint(
+            '[Route Stats] duration=${apiDurationSecs}s  distance=${apiDistanceMeters}m');
+      }
+
       final encodedPolyline =
           (routes[0]['overview_polyline']['points'] as String?) ?? '';
       debugPrint('[Polyline Raw] ${encodedPolyline.length > 80 ? '${encodedPolyline.substring(0, 80)}…' : encodedPolyline}');
@@ -378,6 +404,18 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
             endCap: Cap.roundCap,
           ));
       });
+
+      // ── Update stats IMMEDIATELY from API data ─────────────────────────
+      if (apiDistanceMeters != null && apiDistanceMeters > 0) {
+        _applyStats(
+          distanceMeters: apiDistanceMeters,
+          durationSecs: apiDurationSecs,
+        );
+      } else {
+        // Fallback: haversine from driver position
+        _updateStats(driverPos);
+      }
+
     } catch (e) {
       debugPrint('[Route ERROR] Exception: $e');
       if (mounted) setState(() => _isLoadingRoute = false);
@@ -430,6 +468,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
         : _currentMarkerPos ?? const LatLng(24.8607, 67.0011);
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           // ── Map ──────────────────────────────────────────────────────────
@@ -547,15 +586,26 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      _buildStatBox('ETA', _etaTime),
-                      const SizedBox(width: 12),
-                      _buildStatBox('TIME', '$_estimatedMinutes min'),
+                      _buildStatBox(
+                        'ETA',
+                        _isCalculating ? 'Calc...' : _etaTime,
+                      ),
                       const SizedBox(width: 12),
                       _buildStatBox(
-                          'DIST',
-                          _distanceMiles > 0
-                              ? '${_distanceMiles.toStringAsFixed(1)} miles'
-                              : '--'),
+                        'TIME',
+                        _isCalculating
+                            ? 'Calc...'
+                            : '$_estimatedMinutes min',
+                      ),
+                      const SizedBox(width: 12),
+                      _buildStatBox(
+                        'DIST',
+                        _isCalculating
+                            ? 'Calc...'
+                            : (_distanceMiles > 0
+                                ? '${_distanceMiles.toStringAsFixed(1)} mi'
+                                : 'N/A'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),

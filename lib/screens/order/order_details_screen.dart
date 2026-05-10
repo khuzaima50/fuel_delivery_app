@@ -288,7 +288,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFBFBFB),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,

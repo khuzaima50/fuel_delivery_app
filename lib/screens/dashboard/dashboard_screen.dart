@@ -6,10 +6,13 @@ import 'package:geolocator/geolocator.dart';
 import '../../services/location_service.dart';
 import '../../services/notification_service.dart';
 import '../order/notifications_screen.dart';
-import '../order/order_tracking_screen.dart';
 import '../order/assigned_orders_screen.dart';
+import '../order/delivery_navigation_screen.dart';
+import '../order/order_details_screen.dart';
 import '../profile/settings_screen.dart';
+import '../../services/driver_database_service.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
+import 'dart:math' as math;
 
 
 class DashboardScreen extends StatefulWidget {
@@ -27,35 +30,385 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _driverName = "Loading...";
   String _truckId = "Fetching...";
   Map<String, dynamic>? _activeOrder;
-  bool _isLoading = true;        // true only on first load
-  bool _isFetching = false;      // guards against concurrent fetches
+  bool _isLoading = true;
+  bool _isFetching = false;
   double _currentFuel = 0;
-  final double _maxFuelCapacity = 100; // Max tank capacity in gallons
+  final double _maxFuelCapacity = 100;
   bool _isFuelLoading = true;
   String? _profileImageUrl;
 
+  // ── Nearby orders (shown on dashboard) ────────────────────────────
+  static const double _nearbyRadiusKm = 25.0;
+  List<Map<String, dynamic>> _nearbyOrders = [];
+  String? _acceptingOrderId;          // order ID currently being accepted
+  Position? _driverPosition;
+  RealtimeChannel? _nearbyChannel;
+  StreamSubscription<Position>? _dashLocationStream;
+
   // ── Debounce / cancellation ────────────────────────────────────────
-  /// Each fetch increments this token.  A stale in-flight fetch can detect
-  /// it has been superseded and bail out without updating state.
   int _fetchToken = 0;
-
-  /// Pending debounce timer – collapsed rapid calls into a single fetch.
   Timer? _debounceTimer;
-
-  /// Watchdog that auto-recovers if a fetch gets stuck in loading.
   Timer? _watchdogTimer;
 
   @override
   void initState() {
     super.initState();
     _scheduleFetch();
+    _startLocationWatch();
+    _subscribeNearbyOrders();
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
     _watchdogTimer?.cancel();
+    _nearbyChannel?.unsubscribe();
+    _dashLocationStream?.cancel();
     super.dispose();
+  }
+
+  // ── Haversine ─────────────────────────────────────────────────────
+  double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLng = (lng2 - lng1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) * math.cos(lat2 * math.pi / 180) *
+        math.sin(dLng / 2) * math.sin(dLng / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  // ── Track driver location for proximity filter ─────────────────────
+  Future<void> _startLocationWatch() async {
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
+      if (perm == LocationPermission.deniedForever) return;
+      final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+      if (mounted) {
+        setState(() => _driverPosition = pos);
+        _fetchNearbyOrders(); // Re-fetch orders with the actual location
+      }
+      _dashLocationStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, distanceFilter: 300),
+      ).listen((p) { 
+        if (mounted) {
+          setState(() => _driverPosition = p);
+          _fetchNearbyOrders(); // Re-fetch if driver moves significantly
+        }
+      });
+    } catch (_) {}
+  }
+
+  // ── Whether an order is within 25 km ─────────────────────────────────────────
+  // Returns TRUE when: no driver position, or no order coordinates, or within radius.
+  // This is conservative — when in doubt, SHOW the order.
+  bool _isNearby(Map<String, dynamic> order) {
+    final pos = _driverPosition;
+    if (pos == null) {
+      debugPrint('[NearbyFilter] No driver position yet — showing order ${order['id']} by default.');
+      return true;
+    }
+
+    // Try all known coordinate field names used in this app's DB schema
+    final latRaw = order['customer_lat']
+        ?? order['delivery_lat']
+        ?? order['latitude']
+        ?? order['delivery_latitude']
+        ?? order['lat'];
+    final lngRaw = order['customer_lng']
+        ?? order['delivery_lng']
+        ?? order['longitude']
+        ?? order['delivery_longitude']
+        ?? order['lng'];
+
+    final lat = double.tryParse(latRaw?.toString() ?? '');
+    final lng = double.tryParse(lngRaw?.toString() ?? '');
+
+    if (lat == null || lng == null || lat == 0.0 || lng == 0.0) {
+      debugPrint('[NearbyFilter] No valid coords for order ${order['id']} — showing by default.');
+      return true; // Show when coords are missing/zero
+    }
+
+    final distance = _haversineKm(pos.latitude, pos.longitude, lat, lng);
+    final isWithin = distance <= _nearbyRadiusKm;
+
+    debugPrint('[NearbyFilter] Order ${order['id']}: '
+        'driver=(${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}) '
+        'order=($lat, $lng) '
+        'dist=${distance.toStringAsFixed(2)}km '
+        '${isWithin ? "SHOW" : "HIDE"} (radius=$_nearbyRadiusKm km)');
+
+    return isWithin;
+  }
+
+  // ── Realtime subscription for available/pending orders ────────────
+  void _subscribeNearbyOrders() {
+    _nearbyChannel?.unsubscribe();
+    _nearbyChannel = Supabase.instance.client
+        .channel('dashboard:nearby_orders')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'orders',
+          callback: (payload) {
+            final order = Map<String, dynamic>.from(payload.newRecord);
+            final status = order['status']?.toString().toLowerCase() ?? '';
+            final dId = order['driver_id'];
+            final hasDriver = dId != null && dId.toString().trim().isNotEmpty && dId.toString().trim() != 'null';
+            if (!mounted) return;
+            if ((status == 'available' || status == 'pending') && !hasDriver && _isNearby(order)) {
+              setState(() {
+                if (!_nearbyOrders.any((o) => o['id'] == order['id'])) {
+                  _nearbyOrders.insert(0, order);
+                }
+              });
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'orders',
+          callback: (payload) {
+            final order = Map<String, dynamic>.from(payload.newRecord);
+            final status = order['status']?.toString().toLowerCase() ?? '';
+            final dId = order['driver_id'];
+            final hasDriver = dId != null && dId.toString().trim().isNotEmpty && dId.toString().trim() != 'null';
+            if (!mounted) return;
+            setState(() {
+              // Remove if no longer available (assigned by someone else)
+              if (hasDriver || (status != 'available' && status != 'pending')) {
+                _nearbyOrders.removeWhere((o) => o['id'] == order['id']);
+              }
+            });
+          },
+        )
+        .subscribe();
+
+    // Also do an initial DB fetch of current nearby available orders
+    _fetchNearbyOrders();
+  }
+
+  Future<void> _fetchNearbyOrders() async {
+    try {
+      // Fetch recent orders WITHOUT SQL status/driver_id filters.
+      // Reason 1: DB stores 'PENDING' (uppercase) but inFilter only matches exact case.
+      // Reason 2: driver_id IS NULL misses empty-string driver_ids.
+      // We mirror assigned_orders_screen exactly — filter everything in Dart.
+      final data = await Supabase.instance.client
+          .from('orders')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(300);
+      if (!mounted) return;
+
+      final fetched = (data as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .where((o) {
+            // Status check — case-insensitive, same as assigned_orders_screen
+            final status = o['status']?.toString().toLowerCase().trim() ?? '';
+            if (status != 'available' && status != 'pending') return false;
+
+            // driver_id check — null, empty string, or literal "null" = unclaimed
+            final dId = o['driver_id'];
+            final isUnclaimed = dId == null ||
+                dId.toString().trim().isEmpty ||
+                dId.toString().trim() == 'null';
+            if (!isUnclaimed) return false;
+
+            // Proximity check — conservative, shows when no coords available
+            return _isNearby(o);
+          })
+          .toList();
+
+      debugPrint('[Dashboard] _fetchNearbyOrders: ${data.length} total fetched → '
+          '${fetched.length} unclaimed+nearby orders');
+
+      setState(() {
+        _nearbyOrders = fetched;
+      });
+    } catch (e) {
+      debugPrint('[Dashboard] _fetchNearbyOrders error: $e');
+    }
+
+  }
+
+  // ── Race-safe accept ───────────────────────────────────────────────
+  Future<void> _acceptNearbyOrder(Map<String, dynamic> order) async {
+    final orderId = order['id']?.toString() ?? '';
+    if (orderId.isEmpty || _acceptingOrderId != null) return;
+    if (mounted) setState(() => _acceptingOrderId = orderId);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+
+      // ── PREFLIGHT CHECK: Live DB se confirm karo ke order abhi bhi available hai ──
+      final liveCheck = await Supabase.instance.client
+          .from('orders')
+          .select('id, status, driver_id')
+          .eq('id', orderId)
+          .maybeSingle();
+
+      if (liveCheck == null) {
+        // Order DB mein mil hi nahi raha
+        if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Order no longer available.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
+
+      final liveStatus = liveCheck['status']?.toString().toLowerCase() ?? '';
+
+      // Safely extract driver_id — treat null, empty string, and literal "null" as unclaimed
+      final rawDriverId = liveCheck['driver_id'];
+      final bool hasRealDriver = rawDriverId != null &&
+          rawDriverId.toString().trim().isNotEmpty &&
+          rawDriverId.toString().trim() != 'null';
+      final String liveDriverId = hasRealDriver ? rawDriverId.toString().trim() : '';
+
+      debugPrint('[Dashboard] Preflight: status=$liveStatus driverId=$liveDriverId hasDriver=$hasRealDriver');
+
+      // Agar yeh order pehle se current driver ka hai — seedha navigate karo
+      if (hasRealDriver && liveDriverId == user.id) {
+        if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
+        final fullOrder = await Supabase.instance.client
+            .from('orders').select().eq('id', orderId).maybeSingle();
+        if (!mounted) return;
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => DeliveryNavigationScreen(order: fullOrder ?? {'id': orderId}),
+        ));
+        return;
+      }
+
+      // Agar kisi AUR (real) driver ne le liya
+      if (hasRealDriver || (liveStatus != 'available' && liveStatus != 'pending')) {
+        if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Sorry, this order was just accepted by another driver.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
+      // ── END PREFLIGHT ──────────────────────────────────────────────
+
+
+      final profile = await Supabase.instance.client
+          .from('drivers')
+          .select('full_name, avatar_url, vehicle_type, phone')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 5)));
+      } catch (_) {}
+
+      final nowTs = DateTime.now().toUtc().toIso8601String();
+      final payload = <String, dynamic>{
+        'status': 'assigned',
+        'driver_id': user.id,
+        'assigned_at': nowTs,
+        'driver_name': profile?['full_name'] ?? 'Driver',
+        'driver_photo': profile?['avatar_url'] ?? '',
+        'driver_vehicle': profile?['vehicle_type'] ?? 'Fuel Truck',
+        'driver_phone': profile?['phone'] ?? '',
+        if (pos != null) 'driver_latitude': pos.latitude,
+        if (pos != null) 'driver_longitude': pos.longitude,
+      };
+
+      // ── UPDATE: Simple eq-only update (no SQL status/driver_id guards) ──────
+      // Reason: SQL inFilter is case-sensitive ('PENDING' ≠ 'pending') and
+      // 'driver_id IS NULL' misses empty-string driver_ids — both cause false
+      // "accepted by another driver" errors.
+      // Race safety is ensured by reading the row AFTER the update and verifying
+      // that driver_id is now set to OUR user ID.
+      await Supabase.instance.client
+          .from('orders')
+          .update(payload)
+          .eq('id', orderId);
+
+      // Verify the update won the race — read back the current row
+      final verifyRow = await Supabase.instance.client
+          .from('orders')
+          .select('id, driver_id, status')
+          .eq('id', orderId)
+          .maybeSingle();
+
+      final actualDriverId = verifyRow?['driver_id']?.toString() ?? '';
+      final actualStatus   = verifyRow?['status']?.toString().toLowerCase() ?? '';
+
+      debugPrint('[Dashboard] Post-update verify: driver_id=$actualDriverId status=$actualStatus');
+
+      if (actualDriverId != user.id) {
+        // Another driver won the race between preflight and update
+        if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Sorry, this order was just accepted by another driver.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
+
+
+      // Log
+      try {
+        await DriverDatabaseService.instance.logDriverAction(
+          action: 'ORDER_ACCEPTED',
+          details: {'order_id': orderId, 'assigned_at': nowTs},
+        );
+      } catch (_) {}
+
+      // Remove from nearby list and refresh dashboard
+      if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
+      _scheduleFetch();
+
+      // Fetch full order row to show OrderDetailsScreen
+      // (Driver taps Navigate from there — same flow as assigned_orders_screen)
+      Map<String, dynamic>? fullOrder;
+      try {
+        fullOrder = await Supabase.instance.client
+            .from('orders').select().eq('id', orderId).maybeSingle();
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      // Navigate to OrderDetailsScreen first — driver can then tap navigate to start journey
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => OrderDetailsScreen(order: fullOrder ?? {'id': orderId}),
+      ));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Order accepted! Tap 'Navigate' to start delivery."),
+        backgroundColor: Color(0xFF4CAF50),
+        behavior: SnackBarBehavior.floating,
+      ));
+
+    } catch (e) {
+      debugPrint('[Dashboard] _acceptNearbyOrder error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _acceptingOrderId = null);
+      }
+    }
   }
 
   // ── Debounced fetch entry-point ────────────────────────────────────
@@ -573,7 +926,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildActiveOrderCard() {
-    final customerPhone = _activeOrder!['customer_phone']?.toString() ?? '';
+    // Try multiple field names — different parts of the app store phone differently
+    final customerPhone = [
+      _activeOrder!['customer_phone'],
+      _activeOrder!['phone'],
+      _activeOrder!['customer_mobile'],
+      _activeOrder!['user_phone'],
+    ].firstWhere(
+      (v) => v != null && v.toString().trim().isNotEmpty,
+      orElse: () => null,
+    )?.toString().trim() ?? '';
+
+    // ── Scheduled time-lock ───────────────────────────────────────────
+    final rawScheduledTime = _activeOrder!['scheduled_time'];
+    DateTime? scheduledDt;
+    if (rawScheduledTime != null &&
+        rawScheduledTime.toString().trim().isNotEmpty) {
+      try {
+        scheduledDt = DateTime.parse(rawScheduledTime.toString()).toLocal();
+      } catch (_) {}
+    }
+    final bool isTimeLocked = scheduledDt != null &&
+        scheduledDt.difference(DateTime.now()).inMinutes > 60;
+    final String scheduledLabel = scheduledDt != null
+        ? '${scheduledDt.hour > 12 ? scheduledDt.hour - 12 : (scheduledDt.hour == 0 ? 12 : scheduledDt.hour)}:${scheduledDt.minute.toString().padLeft(2, '0')} ${scheduledDt.hour >= 12 ? 'PM' : 'AM'}'
+        : '';
+
+    void showTimeLockWarning() {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Scheduled order. You can start this delivery 1 hour before the scheduled time (Scheduled for: $scheduledLabel).',
+          ),
+          backgroundColor: const Color(0xFFFF8C00),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
 
     // Prefer customer_lat/lng (actual GPS location) over delivery_lat/lng
     double? extractDouble(String key1, String key2) {
@@ -585,9 +978,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final deliveryLat = extractDouble('customer_lat', 'delivery_lat');
     final deliveryLng = extractDouble('customer_lng', 'delivery_lng');
-    final address = _activeOrder!['delivery_address']?.toString();
-    final fuelInfo =
-        '${_activeOrder!['fuel_type'] ?? 'Fuel'} • ${_activeOrder!['fuel_quantity'] ?? _activeOrder!['fuel_quantity_gallons'] ?? 'N/A'} Gallons';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -677,29 +1067,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           const SizedBox(height: 20),
-          // Navigate + Contact buttons
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => OrderTrackingScreen(
-                          deliveryLat: deliveryLat,
-                          deliveryLng: deliveryLng,
-                          deliveryAddress: address,
-                          fuelInfo: fuelInfo,
-                          order: _activeOrder,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.explore_outlined, size: 20),
+                  onPressed: isTimeLocked
+                      ? showTimeLockWarning
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => DeliveryNavigationScreen(
+                                order: _activeOrder,
+                              ),
+                            ),
+                          );
+                        },
+                  icon: Icon(
+                    Icons.explore_outlined,
+                    size: 20,
+                    color: isTimeLocked ? Colors.grey : Colors.white,
+                  ),
                   label: const Text('Navigate'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF4D00),
-                    foregroundColor: Colors.white,
+                    backgroundColor: isTimeLocked
+                        ? const Color(0xFFDDDDDD)
+                        : const Color(0xFFFF4D00),
+                    foregroundColor:
+                        isTimeLocked ? Colors.grey : Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -710,23 +1104,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    if (customerPhone.isNotEmpty) {
-                      _makePhoneCall(customerPhone);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Customer phone number not available'),
-                          backgroundColor: Colors.orangeAccent,
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.phone_outlined, size: 20),
+                  onPressed: isTimeLocked
+                      ? showTimeLockWarning
+                      : () async {
+                          if (customerPhone.isNotEmpty) {
+                            await _makePhoneCall(customerPhone);
+                          } else {
+                            // Try to fetch phone from profiles table
+                            final userId = _activeOrder!['user_id']?.toString();
+                            if (userId != null && userId.isNotEmpty) {
+                              try {
+                                final profile = await Supabase.instance.client
+                                    .from('profiles')
+                                    .select('phone_number, phone')
+                                    .eq('id', userId)
+                                    .maybeSingle();
+                                final phone = (profile?['phone_number'] ?? profile?['phone'])?.toString().trim() ?? '';
+                                if (phone.isNotEmpty && mounted) {
+                                  await _makePhoneCall(phone);
+                                  return;
+                                }
+                              } catch (_) {}
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Customer phone number not available.'),
+                                  backgroundColor: Colors.orangeAccent,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: Icon(
+                    Icons.phone_outlined,
+                    size: 20,
+                    color: isTimeLocked ? Colors.grey : Colors.white,
+                  ),
                   label: const Text('Contact'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF4D00),
-                    foregroundColor: Colors.white,
+                    backgroundColor: isTimeLocked
+                        ? const Color(0xFFDDDDDD)
+                        : const Color(0xFFFF4D00),
+                    foregroundColor:
+                        isTimeLocked ? Colors.grey : Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -742,37 +1163,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
             width: double.infinity,
             height: 44,
             child: OutlinedButton.icon(
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                if (deliveryLat != null && deliveryLng != null) {
-                  final url = Uri.parse(
-                    'https://www.google.com/maps/dir/?api=1&destination=$deliveryLat,$deliveryLng',
-                  );
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  } else {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                          content: Text('Could not open Google Maps.')),
-                    );
-                  }
-                } else {
-                  messenger.showSnackBar(
-                    const SnackBar(
-                        content:
-                            Text('No GPS coordinates for this order yet.')),
-                  );
-                }
-              },
-              icon: const Icon(Icons.map_outlined,
-                  color: Color(0xFFFF4D00), size: 18),
-              label: const Text(
+              onPressed: isTimeLocked
+                  ? showTimeLockWarning
+                  : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      if (deliveryLat != null && deliveryLng != null) {
+                        final url = Uri.parse(
+                          'https://www.google.com/maps/dir/?api=1&destination=$deliveryLat,$deliveryLng',
+                        );
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url,
+                              mode: LaunchMode.externalApplication);
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                                content:
+                                    Text('Could not open Google Maps.')),
+                          );
+                        }
+                      } else {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                              content: Text(
+                                  'No GPS coordinates for this order yet.')),
+                        );
+                      }
+                    },
+              icon: Icon(
+                Icons.map_outlined,
+                color: isTimeLocked
+                    ? Colors.grey
+                    : const Color(0xFFFF4D00),
+                size: 18,
+              ),
+              label: Text(
                 'Open in Google Maps',
                 style: TextStyle(
-                    color: Color(0xFFFF4D00), fontWeight: FontWeight.w700),
+                    color: isTimeLocked
+                        ? Colors.grey
+                        : const Color(0xFFFF4D00),
+                    fontWeight: FontWeight.w700),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFFFF4D00)),
+                side: BorderSide(
+                    color: isTimeLocked
+                        ? Colors.grey
+                        : const Color(0xFFFF4D00)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
@@ -784,63 +1220,177 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSearchingOrderCard() {
+    if (_nearbyOrders.isEmpty) {
+      // No nearby orders yet — show radar pulse
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFF2F2F2)),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.radar, size: 48, color: Color(0xFFFF4D00)),
+            const SizedBox(height: 16),
+            const Text(
+              'Searching for nearby orders...',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F)),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'New orders within 25 km will appear here automatically.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Color(0xFF888888)),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AssignedOrdersScreen()),
+                ),
+                icon: const Icon(Icons.list_alt_rounded, size: 18, color: Color(0xFFFF4D00)),
+                label: const Text('View All Orders',
+                    style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFFF4D00))),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFFF4D00)),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Nearby orders list
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.location_on, color: Color(0xFFFF4D00), size: 16),
+            const SizedBox(width: 6),
+            Text(
+              '${_nearbyOrders.length} order${_nearbyOrders.length == 1 ? '' : 's'} within 25 km',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFFF4D00)),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AssignedOrdersScreen()),
+              ),
+              child: const Text('View All', style: TextStyle(fontSize: 12, color: Color(0xFF888888))),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ..._nearbyOrders.map((order) => _buildNearbyOrderCard(order)),
+      ],
+    );
+  }
+
+  Widget _buildNearbyOrderCard(Map<String, dynamic> order) {
+    final orderId = order['id']?.toString() ?? '';
+    final shortId = '#ORD-${orderId.length >= 4 ? orderId.substring(0, 4).toUpperCase() : orderId.toUpperCase()}';
+    final address = order['delivery_address']?.toString() ?? 'Unknown Location';
+    final fuelType = '${order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? '?'} Gal ${order['fuel_type'] ?? 'Fuel'}';
+    final isAccepting = _acceptingOrderId == orderId;
+
+    // Distance label
+    String distLabel = '';
+    final pos = _driverPosition;
+    if (pos != null) {
+      final lat = double.tryParse(order['latitude']?.toString() ?? '');
+      final lng = double.tryParse(order['longitude']?.toString() ?? '');
+      if (lat != null && lng != null) {
+        final km = _haversineKm(pos.latitude, pos.longitude, lat, lng);
+        distLabel = km < 1 ? '${(km * 1000).round()} m away' : '${km.toStringAsFixed(1)} km away';
+      }
+    }
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFF2F2F2)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
       ),
-      child: Column(
+      child: Stack(
         children: [
-          const Icon(
-            Icons.radar, 
-            size: 48, 
-            color: Color(0xFFFF4D00),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Searching for nearby orders...',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1F1F1F),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Make sure your vehicle is ready.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: Color(0xFF888888),
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const AssignedOrdersScreen(),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4D00),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          Positioned(left: 0, top: 14, bottom: 14,
+              child: Container(width: 3, decoration: BoxDecoration(color: const Color(0xFFFF4D00), borderRadius: BorderRadius.circular(2)))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(shortId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFFF4D00))),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(6)),
+                      child: const Text('AVAILABLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF2E7D32))),
+                    ),
+                    const Spacer(),
+                    if (distLabel.isNotEmpty)
+                      Text(distLabel, style: const TextStyle(fontSize: 11, color: Color(0xFF888888), fontWeight: FontWeight.w600)),
+                  ],
                 ),
-              ),
-              child: const Text(
-                'View All Orders',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+                const SizedBox(height: 8),
+                Text(address,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1F1F1F)),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.local_gas_station, size: 13, color: Color(0xFF888888)),
+                    const SizedBox(width: 4),
+                    Text(fuelType, style: const TextStyle(fontSize: 12, color: Color(0xFF888888), fontWeight: FontWeight.w500)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: (_acceptingOrderId != null)
+                        ? null
+                        : () => _acceptNearbyOrder(order),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isAccepting ? const Color(0xFF81C784) : const Color(0xFF2E7D32),
+                      disabledBackgroundColor: const Color(0xFF81C784),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: isAccepting
+                        ? const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(width: 16, height: 16,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                              SizedBox(width: 10),
+                              Text('Accepting…', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            ],
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check_circle_outline_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('Accept Order', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'otp_verification_screen.dart';
+import 'update_password_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -13,7 +15,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
-  Future<void> _sendResetLink() async {
+  Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -21,20 +23,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       final email = _emailController.text.trim();
       
-      // Sending reset password email via Supabase
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: 'fueldirect://reset-callback/', // Important: Deep link callback URL
+      // We use signInWithOtp for password reset flow to ensure we get a session
+      // after verification. This allows the user to update their password.
+      // NOTE: Ensure "Magic Link" template in Supabase is configured to send a code.
+      await Supabase.instance.client.auth.signInWithOtp(
+        email: email,
+        shouldCreateUser: false, // Ensure we only allow existing users
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Password reset link sent to your email!'),
-            backgroundColor: Color(0xFF4CAF50), // Green for success
+            content: Text('Verification code sent to your email!'),
+            backgroundColor: Color(0xFF4CAF50),
           ),
         );
-        Navigator.of(context).pop(); // Go back to login screen
+        
+        // Navigate to OTP verification screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => OtpVerificationScreen(
+              email: email,
+              isRecovery: true, 
+              nextScreen: const UpdatePasswordScreen(),
+            ),
+          ),
+        );
       }
     } on AuthException catch (error) {
       if (mounted) {
@@ -185,7 +199,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   width: double.infinity,
                   height: 58,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _sendResetLink,
+                    onPressed: _isLoading ? null : _sendOtp,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF4D00),
                       foregroundColor: Colors.white,
