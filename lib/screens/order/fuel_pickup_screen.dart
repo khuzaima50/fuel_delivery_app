@@ -306,24 +306,13 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     FilteringTextInputFormatter.digitsOnly, // only digits allowed
                     LengthLimitingTextInputFormatter(12),
                   ],
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: 'e.g. 12345678',
-                    hintStyle: const TextStyle(
+                    hintStyle: TextStyle(
                       color: Color(0xFFAAAAAA),
                       fontSize: 14,
                     ),
                     border: InputBorder.none,
-                    suffixIcon: IconButton(
-                      icon: const Icon(
-                        Icons.qr_code_scanner,
-                        color: Color(0xFF888888),
-                      ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Opening scanner...')),
-                        );
-                      },
-                    ),
                   ),
                 ),
               ),

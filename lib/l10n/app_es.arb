@@ -1,0 +1,327 @@
+{
+  "@@locale": "es",
+
+  "appName": "FuelDirect",
+
+  "splashTagline": "Obtén combustible de primera calidad entregado directamente a tu vehículo, donde estés",
+
+  "onboardingSkip": "Omitir",
+  "onboardingNext": "Siguiente",
+  "onboardingGetStarted": "Comenzar",
+  "onboardingTitle1": "Bienvenido a ",
+  "onboardingTitleSpan1": "FUEL DIRECT",
+  "onboardingDesc1": "Entrega combustible de forma segura y eficiente\na clientes en toda la ciudad",
+  "onboardingTitle2": "Navegación en Tiempo Real",
+  "onboardingDesc2": "Obtén direcciones giro a giro y actualizaciones\nde tráfico en vivo para cada entrega",
+  "onboardingTitle3": "La Seguridad Primero",
+  "onboardingDesc3": "Completa listas de verificación de seguridad y rastrea\ntodas las entregas con precisión",
+  "onboardingTitle4": "Gana Más",
+  "onboardingDesc4": "Rastrea tus ganancias, entregas y\nrendimiento en tiempo real",
+
+  "loginWelcomeBack": "Bienvenido de Nuevo",
+  "loginSignInToContinue": "Inicia sesión para continuar",
+  "loginEmailAddress": "Correo Electrónico",
+  "loginEmailHint": "alex@ejemplo.com",
+  "loginPassword": "Contraseña",
+  "loginPasswordHint": "Ingresa tu contraseña",
+  "loginForgotPassword": "¿Olvidaste tu contraseña?",
+  "loginSignIn": "Iniciar Sesión",
+  "loginNoAccount": "¿No tienes una cuenta? ",
+  "loginSignUp": "Regístrate",
+  "loginEmptyFields": "Por favor ingresa tu correo y contraseña",
+  "loginFailedVerification": "Error al enviar el código de verificación. Inténtalo de nuevo.",
+  "loginUnexpectedError": "Ocurrió un error inesperado",
+
+  "signUpCreateAccount": "Crear Cuenta",
+  "signUpGetStarted": "Regístrate para comenzar",
+  "signUpFullName": "Nombre Completo",
+  "signUpFullNameHint": "Alexander Pierce",
+  "signUpEmailAddress": "Correo Electrónico",
+  "signUpEmailHint": "alex@ejemplo.com",
+  "signUpPhoneNumber": "Número de Teléfono",
+  "signUpPhoneHint": "+1 (555) 000-0000",
+  "signUpPassword": "Contraseña",
+  "signUpPasswordHint": "Crea una contraseña",
+  "signUpConfirmPassword": "Confirmar Contraseña",
+  "signUpConfirmPasswordHint": "Confirma tu contraseña",
+  "signUpAgreeText": "Acepto los ",
+  "signUpTermsOfService": "Términos de Servicio",
+  "signUpAnd": " y la ",
+  "signUpPrivacyPolicy": "Política de Privacidad",
+  "signUpButton": "Crear Cuenta",
+  "signUpAlreadyAccount": "¿Ya tienes una cuenta? ",
+  "signUpSignIn": "Iniciar Sesión",
+  "signUpFillAllFields": "Por favor completa todos los campos",
+  "signUpPasswordMismatch": "Las contraseñas no coinciden",
+  "signUpAccountCreatedPartial": "¡Cuenta creada! Pero no se pudo enviar el código de verificación. Intenta iniciar sesión.",
+  "signUpUnexpectedError": "Ocurrió un error inesperado",
+
+  "forgotPasswordTitle": "Olvidé mi Contraseña",
+  "forgotPasswordResetTitle": "Restablecer Contraseña",
+  "forgotPasswordDesc": "Ingresa tu correo registrado y te enviaremos un enlace para restablecer tu contraseña.",
+  "forgotPasswordEmailAddress": "Correo Electrónico",
+  "forgotPasswordEmailHint": "alex@ejemplo.com",
+  "forgotPasswordEmailEmpty": "Por favor ingresa tu correo",
+  "forgotPasswordEmailInvalid": "Por favor ingresa un correo válido",
+  "forgotPasswordSendButton": "Enviar Enlace",
+  "forgotPasswordCodeSent": "¡Código de verificación enviado a tu correo!",
+  "forgotPasswordUnexpectedError": "Ocurrió un error inesperado: ",
+
+  "otpVerifyEmail": "Verificar Correo",
+  "otpCodeSentTo": "Hemos enviado un código de 6 dígitos a\n",
+  "otpVerifyButton": "Verificar Código",
+  "otpDidntReceive": "¿No recibiste el código?",
+  "otpResendIn": "Reenviar en {seconds}s",
+  "@otpResendIn": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "otpResendOtp": "Reenviar OTP",
+  "otpEnterFull": "Por favor ingresa el código completo de 6 dígitos",
+  "otpVerificationSuccessful": "¡Verificación Exitosa!",
+  "otpInvalidExpired": "OTP inválido o expirado. Inténtalo de nuevo.",
+  "otpNewSent": "Se ha enviado un nuevo OTP a tu correo",
+  "otpResendFailed": "Error al reenviar OTP. Inténtalo más tarde.",
+
+  "updatePasswordTitle": "Actualizar Contraseña",
+  "updatePasswordCreateNew": "Crear Nueva Contraseña",
+  "updatePasswordDesc": "Tu nueva contraseña debe ser diferente a las contraseñas usadas anteriormente.",
+  "updatePasswordNewLabel": "Nueva Contraseña",
+  "updatePasswordNewHint": "Ingresa nueva contraseña",
+  "updatePasswordConfirmLabel": "Confirmar Nueva Contraseña",
+  "updatePasswordConfirmHint": "Confirma la nueva contraseña",
+  "updatePasswordButton": "Actualizar Contraseña",
+  "updatePasswordSuccess": "¡Contraseña actualizada exitosamente! Por favor inicia sesión.",
+  "updatePasswordEmpty": "Por favor ingresa una nueva contraseña",
+  "updatePasswordTooShort": "La contraseña debe tener al menos 6 caracteres",
+  "updatePasswordConfirmEmpty": "Por favor confirma tu nueva contraseña",
+  "updatePasswordMismatch": "Las contraseñas no coinciden",
+
+  "profileSetupTitle": "Completa tu Perfil",
+  "profileSetupDesc": "Revisa tus datos y agrega una foto de perfil para que los clientes puedan identificarte.",
+  "profileSetupTapToAdd": "Toca para agregar / cambiar foto de perfil",
+  "profileSetupFullName": "Nombre Completo",
+  "profileSetupFullNameHint": "ej. Ahmed Khan",
+  "profileSetupPhoneNumber": "Número de Teléfono",
+  "profileSetupPhoneHint": "+92 300 0000000",
+  "profileSetupSaveContinue": "Guardar y Continuar",
+  "profileSetupNameRequired": "Por favor ingresa tu nombre completo",
+  "profileSetupNameTooShort": "El nombre debe tener al menos 3 caracteres",
+  "profileSetupPhoneRequired": "Por favor ingresa tu número de teléfono",
+  "profileSetupPhoneInvalid": "Ingresa un número de teléfono válido",
+  "profileSetupPhotoError": "No se pudo seleccionar la foto: ",
+  "profileSetupSaveError": "Error al guardar el perfil: ",
+  "profileSetupChoosePhoto": "Elegir Foto",
+  "profileSetupTakePhoto": "Tomar una foto",
+  "profileSetupChooseGallery": "Elegir de la galería",
+
+  "vehicleDetailsTitle": "Datos del Vehículo",
+  "vehicleDetailsDesc": "Registra tu camión cisterna para empezar a recibir\nsolicitudes de entrega.",
+  "vehicleDetailsMake": "Marca del Vehículo",
+  "vehicleDetailsMakeHint": "ej. Ford, Mercedes, Isuzu",
+  "vehicleDetailsModel": "Modelo / Variante",
+  "vehicleDetailsModelHint": "ej. F-550 Cisterna",
+  "vehicleDetailsYear": "Año",
+  "vehicleDetailsYearHint": "2023",
+  "vehicleDetailsLicense": "Placa",
+  "vehicleDetailsLicenseHint": "ABC-1234",
+  "vehicleDetailsSaveProceed": "Guardar y Continuar",
+  "vehicleDetailsMakeRequired": "Por favor ingresa la marca",
+  "vehicleDetailsModelRequired": "Por favor ingresa el modelo",
+  "vehicleDetailsRequired": "Requerido",
+  "vehicleDetailsSessionLost": "Sesión perdida. Por favor inicia sesión de nuevo.",
+  "vehicleDetailsLogIn": "Iniciar Sesión",
+  "vehicleDetailsSaveError": "Error al guardar datos del vehículo: ",
+
+  "docVerificationTitle": "Verificación de Documentos",
+  "docVerificationDesc": "Sube los documentos requeridos para completar\ntu registro",
+  "docVerificationDriversLicense": "Licencia de Conducir",
+  "docVerificationDriversLicenseDesc": "ID gubernamental válido",
+  "docVerificationCommercialLicense": "Licencia Comercial",
+  "docVerificationCommercialLicenseDesc": "CDL o certificación equivalente",
+  "docVerificationVehicleReg": "Registro del Vehículo",
+  "docVerificationVehicleRegDesc": "Registro actual del vehículo",
+  "docVerificationInsurance": "Certificado de Seguro",
+  "docVerificationInsuranceDesc": "Seguro comercial válido",
+  "docVerificationBackground": "Verificación de Antecedentes",
+  "docVerificationBackgroundDesc": "Consentimiento para verificación de antecedentes",
+  "docVerificationUploaded": "Subido",
+  "docVerificationUploadFile": "Subir Archivo",
+  "docVerificationCompleteReg": "Completar Registro",
+  "docVerificationUploadAll": "Por favor sube todos los documentos requeridos para continuar",
+  "docVerificationAttached": "¡Documento {number} adjuntado exitosamente!",
+  "@docVerificationAttached": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "docVerificationFailed": "Error al seleccionar documento: ",
+
+  "dashboardDelivers": "Entregas",
+  "dashboardActive": "Activo",
+  "dashboardOffline": "Desconectado",
+  "dashboardReceivingOrders": "Recibiendo Pedidos",
+  "dashboardGoOnline": "Conectarse",
+  "dashboardFuelCapacity": "Capacidad de Combustible",
+  "dashboardLoading": "Cargando...",
+  "dashboardEmpty": "Vacío",
+  "dashboardActiveDelivery": "Entrega Activa",
+  "dashboardAvailableStatus": "Estado Disponible",
+  "dashboardNearbyOrders": "Pedidos Cercanos",
+  "dashboardNoActiveOrder": "Sin pedido activo",
+  "dashboardReadyToAccept": "Listo para aceptar pedidos",
+  "dashboardNavigate": "Navegar",
+  "dashboardAccept": "Aceptar",
+  "dashboardCustomer": "Cliente",
+  "dashboardOrderNoLongerAvailable": "El pedido ya no está disponible.",
+  "dashboardOrderTakenByAnother": "Lo sentimos, este pedido fue aceptado por otro conductor.",
+  "dashboardOrderAccepted": "¡Pedido aceptado! Toca 'Navegar' para iniciar la entrega.",
+  "dashboardFailedUpdateStatus": "Error al actualizar estado. Verifica tu conexión.",
+  "dashboardEmergencyAlert": "¡Alerta de emergencia enviada! Pedido movido a cola de emergencia.",
+  "dashboardFailedEmergency": "Error al activar emergencia: ",
+  "dashboardFailedAction": "Error: ",
+  "dashboardCannotDialer": "No se pudo abrir el marcador telefónico",
+  "dashboardEmergencyTitle": "Alerta de Emergencia",
+  "dashboardEmergencyPrompt": "¿Estás seguro de que quieres activar una alerta de emergencia? Esto notificará a despacho de inmediato.",
+  "dashboardEmergencyConfirm": "Enviar Alerta",
+  "dashboardEmergencySubtitle": "Mantén pulsado en caso de derrame de combustible,\nincendio o accidente.",
+  "dashboardScheduledWarning": "Pedido programado. Puedes iniciar esta entrega 1 hora antes de la hora programada (Programado para: {time}).",
+  "@dashboardScheduledWarning": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "dashboardContact": "Contacto",
+  "dashboardOpenMaps": "Abrir en Google Maps",
+  "dashboardOpenMapsError": "No se pudo abrir Google Maps.",
+  "dashboardNoGps": "No hay coordenadas GPS para este pedido todavía.",
+  "dashboardSearchingNearby": "Buscando pedidos cercanos...",
+  "dashboardSearchingNearbyDesc": "Los nuevos pedidos dentro de 25 km aparecerán aquí automáticamente.",
+  "dashboardViewAllOrders": "Ver Todos los Pedidos",
+  "dashboardViewAllText": "Ver Todos",
+  "dashboardStatusAvailable": "DISPONIBLE",
+  "dashboardStatusAssigned": "ASIGNADO",
+  "dashboardAccepting": "Aceptando...",
+  "dashboardAcceptOrder": "Aceptar Pedido",
+  "dashboardOfflineCardTitle": "Actualmente estás desconectado",
+  "dashboardOfflineCardDesc": "Cambia tu estado arriba a la derecha para comenzar a recibir entregas.",
+  "dashboardNoPhone": "El número de teléfono del cliente no está disponible.",
+  "dashboardMilesAway": "a {miles} millas de distancia",
+  "@dashboardMilesAway": {
+    "placeholders": {
+      "miles": {
+        "type": "String"
+      }
+    }
+  },
+  "dashboardMetersAway": "a {meters} m de distancia",
+  "@dashboardMetersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "int"
+      }
+    }
+  },
+  "dashboardKmAway": "a {km} km de distancia",
+  "@dashboardKmAway": {
+    "placeholders": {
+      "km": {
+        "type": "String"
+      }
+    }
+  },
+  "dashboardOrdersCount": "{count} {count, plural, =1{pedido} other{pedidos}} dentro de 25 km",
+  "@dashboardOrdersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+
+  "settingsTitle": "Configuración",
+  "settingsFuelDeliveryPartner": "Socio de Entrega de Combustible",
+  "settingsAppPreferences": "PREFERENCIAS DE APP",
+  "settingsAppLanguage": "Idioma de la App",
+  "settingsPushNotifications": "Notificaciones Push",
+  "settingsAccountSupport": "CUENTA Y SOPORTE",
+  "settingsHelpCenter": "Centro de Ayuda",
+  "settingsPrivacyPolicy": "Política de Privacidad",
+  "settingsLogOut": "Cerrar Sesión",
+  "settingsLogOutFailed": "Error al cerrar sesión. Inténtalo de nuevo.",
+  "settingsProfileUpdated": "¡Foto de perfil actualizada exitosamente!",
+  "settingsProfileUploadFailed": "Error al subir imagen: ",
+
+  "languageTitle": "Idioma de la App",
+  "languageEnglish": "English (US)",
+  "languageSpanish": "Español",
+
+  "helpCenterTitle": "Centro de Ayuda",
+  "helpCenterHowCanWeHelp": "¿Cómo podemos ayudarte?",
+  "helpCenterQ1": "¿Cómo restablezco mi contraseña?",
+  "helpCenterA1": "Para restablecer tu contraseña, haz clic en \"¿Olvidaste tu contraseña?\" en la pantalla de inicio de sesión y sigue las instrucciones enviadas a tu correo.",
+  "helpCenterQ2": "¿Cómo actualizo mi perfil?",
+  "helpCenterA2": "Ve a la pantalla de Configuración, toca tu foto de perfil para subir una nueva y gestiona tus preferencias desde allí.",
+  "helpCenterQ3": "¿Qué hago si un pedido se retrasa?",
+  "helpCenterA3": "Si un pedido se retrasa, usa el chat interno o la notificación push para alertar al equipo de despacho o al cliente de inmediato.",
+  "helpCenterStillNeedHelp": "¿Aún necesitas ayuda?",
+  "helpCenterContactSupport": "Contactar Soporte",
+  "helpCenterContacting": "Contactando soporte...",
+
+  "privacyPolicyTitle": "Política de Privacidad",
+  "privacyPolicy1Title": "1. Descripción General",
+  "privacyPolicy1Body": "¡Bienvenido a FuelDirect Driver App! Tu privacidad es muy importante para nosotros. Esta política describe cómo recopilamos, usamos y protegemos tus datos personales cuando utilizas nuestra aplicación.",
+  "privacyPolicy2Title": "2. Información que Recopilamos",
+  "privacyPolicy2Body": "• Información Personal: Nombre, correo electrónico, número de teléfono.\n• Datos de Ubicación: Recopilamos datos de ubicación precisa para coordinar las entregas de combustible de manera efectiva.\n• Información del Dispositivo: Modelo del dispositivo, sistema operativo e identificadores únicos.",
+  "privacyPolicy3Title": "3. Cómo Usamos la Información",
+  "privacyPolicy3Body": "Los datos recopilados se usan para optimizar las entregas de combustible, rastrear entregas activas, proporcionar orientación en la app y gestionar resúmenes de pagos/ganancias en tu panel.",
+  "privacyPolicy4Title": "4. Compartir Datos",
+  "privacyPolicy4Body": "No vendemos tus datos personales. Podemos compartirlos con socios verificados para mejorar la seguridad de las entregas o según lo requieran las autoridades legales.",
+  "privacyPolicy5Title": "5. Contáctanos",
+  "privacyPolicy5Body": "Para consultas sobre nuestra política de privacidad, contáctanos en support@fueldirect.com o a través del Centro de Ayuda en tu configuración.",
+
+  "chatTitle": "Chat",
+  "chatMessageHint": "Escribe un mensaje...",
+  "chatSend": "Enviar",
+  "chatNoMessages": "Sin mensajes aún. ¡Inicia la conversación!",
+
+  "notificationsTitle": "Notificaciones",
+  "notificationsEmpty": "Sin notificaciones aún",
+  "notificationsEmptyDesc": "Aquí verás actualizaciones de pedidos y alertas",
+
+  "orderHistoryTitle": "Historial de Pedidos",
+  "orderHistoryEmpty": "Sin pedidos completados aún",
+  "orderHistoryCompleted": "Completado",
+  "orderHistoryDelivered": "Entregado",
+
+  "earningsTitle": "Ganancias",
+  "earningsToday": "Hoy",
+  "earningsWeek": "Esta Semana",
+  "earningsMonth": "Este Mes",
+  "earningsTotal": "Total Ganado",
+  "earningsDeliveries": "Entregas",
+  "earningsRating": "Calificación",
+
+  "common_cancel": "Cancelar",
+  "common_confirm": "Confirmar",
+  "common_save": "Guardar",
+  "common_close": "Cerrar",
+  "common_retry": "Reintentar",
+  "common_ok": "Aceptar",
+  "common_yes": "Sí",
+  "common_no": "No",
+  "common_loading": "Cargando...",
+  "common_error": "Ocurrió un error",
+  "common_success": "Éxito",
+  "common_back": "Atrás",
+  "common_next": "Siguiente",
+  "common_submit": "Enviar",
+  "common_done": "Listo"
+}

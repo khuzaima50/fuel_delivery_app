@@ -178,6 +178,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
 ''';
 
   final LatLng _initialPosition = const LatLng(24.8607, 67.0011); // Karachi base 
+  late LatLng _selectedPosition = _initialPosition;
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
@@ -201,6 +202,9 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
               myLocationButtonEnabled: false,
               compassEnabled: false,
               mapToolbarEnabled: false,
+              onCameraMove: (position) {
+                _selectedPosition = position.target;
+              },
             ),
           ),
           
@@ -474,6 +478,9 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                           MaterialPageRoute(
                             builder: (context) => OrderSummaryScreen(
                               scheduledDateTime: widget.scheduledDateTime,
+                              deliveryLat: _selectedPosition.latitude,
+                              deliveryLng: _selectedPosition.longitude,
+                              deliveryAddress: '123 Innovation Drive, San Francisco, CA 94105',
                             ),
                           ),
                         );

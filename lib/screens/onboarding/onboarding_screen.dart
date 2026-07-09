@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../auth/login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -12,33 +13,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  final List<OnboardingData> _pages = [
-    OnboardingData(
-      title: 'Welcome to ',
-      titleSpan: 'FUEL DIRECT',
-      description: 'Deliver fuel safely and efficiently\nto customers across the city',
-      image: 'assets/images/fuel.png',
-      color: const Color(0xFFFFF0E6),
-    ),
-    OnboardingData(
-      title: 'Real-time Navigation',
-      description: 'Get turn-by-turn directions and live\ntraffic updates for every delivery',
-      image: 'assets/images/map.png',
-      color: const Color(0xFFE8F1FF),
-    ),
-    OnboardingData(
-      title: 'Safety First',
-      description: 'Complete safety checklists and track all\ndeliveries with precision',
-      image: 'assets/images/tick.png',
-      color: const Color(0xFFE6F7ED),
-    ),
-    OnboardingData(
-      title: 'Earn More',
-      description: 'Track your earnings, deliveries, and\nperformance in real-time',
-      image: 'assets/images/money.png',
-      color: const Color(0xFFFEF9E7),
-    ),
-  ];
+  // Pages count — data fetched in build from l10n
+  static const int _pageCount = 4;
 
   @override
   void dispose() {
@@ -47,7 +23,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _onNext() {
-    if (_currentPage < _pages.length - 1) {
+    if (_currentPage < _pageCount - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -65,6 +41,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    final List<_OnboardingData> pages = [
+      _OnboardingData(
+        title: l10n.onboardingTitle1,
+        titleSpan: l10n.onboardingTitleSpan1,
+        description: l10n.onboardingDesc1,
+        image: 'assets/images/fuel.png',
+        color: const Color(0xFFFFF0E6),
+      ),
+      _OnboardingData(
+        title: l10n.onboardingTitle2,
+        description: l10n.onboardingDesc2,
+        image: 'assets/images/map.png',
+        color: const Color(0xFFE8F1FF),
+      ),
+      _OnboardingData(
+        title: l10n.onboardingTitle3,
+        description: l10n.onboardingDesc3,
+        image: 'assets/images/tick.png',
+        color: const Color(0xFFE6F7ED),
+      ),
+      _OnboardingData(
+        title: l10n.onboardingTitle4,
+        description: l10n.onboardingDesc4,
+        image: 'assets/images/money.png',
+        color: const Color(0xFFFEF9E7),
+      ),
+    ];
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -77,9 +83,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   TextButton(
                     onPressed: _goToLogin,
-                    child: const Text(
-                      'Skip',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.onboardingSkip,
+                      style: const TextStyle(
                         color: Color(0xFF666666),
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
@@ -89,14 +95,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ],
               ),
             ),
-            
+
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
-                itemCount: _pages.length,
+                itemCount: pages.length,
                 onPageChanged: (index) => setState(() => _currentPage = index),
                 itemBuilder: (context, index) {
-                  final data = _pages[index];
+                  final data = pages[index];
                   return Column(
                     children: [
                       const Spacer(flex: 1),
@@ -173,7 +179,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             // Pagination Dots
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_pages.length, (index) {
+              children: List.generate(pages.length, (index) {
                 bool isActive = _currentPage == index;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
@@ -188,7 +194,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               }),
             ),
             const SizedBox(height: 32),
-            
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: SizedBox(
@@ -205,7 +211,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     elevation: 0,
                   ),
                   child: Text(
-                    _currentPage == _pages.length - 1 ? 'Get Started' : 'Next',
+                    _currentPage == pages.length - 1
+                        ? l10n.onboardingGetStarted
+                        : l10n.onboardingNext,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -219,14 +227,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-class OnboardingData {
+class _OnboardingData {
   final String title;
   final String? titleSpan;
   final String description;
   final String image;
   final Color color;
 
-  OnboardingData({
+  _OnboardingData({
     required this.title,
     this.titleSpan,
     required this.description,

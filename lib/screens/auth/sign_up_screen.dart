@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 import 'document_verification_screen.dart';
@@ -18,12 +19,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _confirmPasswordController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _isLoading = false;
 
   Future<void> _signUp() async {
+    final l10n = AppLocalizations.of(context)!;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
@@ -32,14 +34,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     if (email.isEmpty || password.isEmpty || name.isEmpty || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill all fields")),
+        SnackBar(content: Text(l10n.signUpFillAllFields)),
       );
       return;
     }
 
     if (password != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match")),
+        SnackBar(content: Text(l10n.signUpPasswordMismatch)),
       );
       return;
     }
@@ -53,7 +55,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       );
 
       if (res.user != null) {
-        // Trigger OTP
         final otpSent = await OtpService.sendOtp(email);
 
         if (mounted) {
@@ -69,10 +70,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  "Account created! But failed to send verification code. Please try to log in.",
-                ),
+              SnackBar(
+                content: Text(l10n.signUpAccountCreatedPartial),
                 backgroundColor: Colors.orangeAccent,
               ),
             );
@@ -88,7 +87,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("An unexpected error occurred")),
+          SnackBar(content: Text(AppLocalizations.of(context)!.signUpUnexpectedError)),
         );
       }
     } finally {
@@ -108,6 +107,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -127,9 +127,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                const Text(
-                  'Create Account',
-                  style: TextStyle(
+                Text(
+                  l10n.signUpCreateAccount,
+                  style: const TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -137,35 +137,35 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Sign up to get started',
-                  style: TextStyle(
+                Text(
+                  l10n.signUpGetStarted,
+                  style: const TextStyle(
                     fontSize: 18,
                     color: Color(0xFF666666),
                     fontWeight: FontWeight.w400,
                   ),
                 ),
                 const SizedBox(height: 40),
-                _buildLabel('Full Name'),
-                _buildTextField('Alexander Pierce', controller: _nameController),
+                _buildLabel(l10n.signUpFullName),
+                _buildTextField(l10n.signUpFullNameHint, controller: _nameController),
                 const SizedBox(height: 20),
-                _buildLabel('Email Address'),
+                _buildLabel(l10n.signUpEmailAddress),
                 _buildTextField(
-                  'alex@example.com',
+                  l10n.signUpEmailHint,
                   keyboardType: TextInputType.emailAddress,
                   controller: _emailController,
                 ),
                 const SizedBox(height: 20),
-                _buildLabel('Phone Number'),
+                _buildLabel(l10n.signUpPhoneNumber),
                 _buildTextField(
-                  '+1 (555) 000-0000',
+                  l10n.signUpPhoneHint,
                   keyboardType: TextInputType.phone,
                   controller: _phoneController,
                 ),
                 const SizedBox(height: 20),
-                _buildLabel('Password'),
+                _buildLabel(l10n.signUpPassword),
                 _buildTextField(
-                  'Create a password',
+                  l10n.signUpPasswordHint,
                   isPassword: true,
                   obscureText: _obscurePassword,
                   controller: _passwordController,
@@ -176,9 +176,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   },
                 ),
                 const SizedBox(height: 20),
-                _buildLabel('Confirm Password'),
+                _buildLabel(l10n.signUpConfirmPassword),
                 _buildTextField(
-                  'Confirm your password',
+                  l10n.signUpConfirmPasswordHint,
                   isPassword: true,
                   obscureText: _obscureConfirmPassword,
                   controller: _confirmPasswordController,
@@ -194,26 +194,26 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: RichText(
                       textAlign: TextAlign.center,
-                      text: const TextSpan(
-                        style: TextStyle(
+                      text: TextSpan(
+                        style: const TextStyle(
                           color: Color(0xFF666666),
                           fontSize: 13,
                           height: 1.5,
                           fontFamily: 'Inter',
                         ),
                         children: [
-                          TextSpan(text: 'I agree to the '),
+                          TextSpan(text: l10n.signUpAgreeText),
                           TextSpan(
-                            text: 'Terms of Service',
-                            style: TextStyle(
+                            text: l10n.signUpTermsOfService,
+                            style: const TextStyle(
                               color: Color(0xFFFF4D00),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          TextSpan(text: ' and '),
+                          TextSpan(text: l10n.signUpAnd),
                           TextSpan(
-                            text: 'Privacy Policy',
-                            style: TextStyle(
+                            text: l10n.signUpPrivacyPolicy,
+                            style: const TextStyle(
                               color: Color(0xFFFF4D00),
                               fontWeight: FontWeight.w600,
                             ),
@@ -237,20 +237,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: _isLoading 
+                    child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
+                            children: [
                               Text(
-                                'Create Account',
-                                style: TextStyle(
+                                l10n.signUpButton,
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              SizedBox(width: 8),
-                              Icon(Icons.arrow_forward, size: 20),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward, size: 20),
                             ],
                           ),
                   ),
@@ -260,9 +260,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        "Already have an account? ",
-                        style: TextStyle(
+                      Text(
+                        l10n.signUpAlreadyAccount,
+                        style: const TextStyle(
                           color: Color(0xFF666666),
                           fontSize: 15,
                         ),
@@ -275,9 +275,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                           );
                         },
-                        child: const Text(
-                          'Sign In',
-                          style: TextStyle(
+                        child: Text(
+                          l10n.signUpSignIn,
+                          style: const TextStyle(
                             color: Color(0xFFFF4D00),
                             fontSize: 15,
                             fontWeight: FontWeight.w700,

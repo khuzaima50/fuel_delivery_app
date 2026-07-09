@@ -1,0 +1,327 @@
+{
+  "@@locale": "en",
+
+  "appName": "FuelDirect",
+
+  "splashTagline": "Get premium quality fuel delivered directly to your vehicle, wherever you are",
+
+  "onboardingSkip": "Skip",
+  "onboardingNext": "Next",
+  "onboardingGetStarted": "Get Started",
+  "onboardingTitle1": "Welcome to ",
+  "onboardingTitleSpan1": "FUEL DIRECT",
+  "onboardingDesc1": "Deliver fuel safely and efficiently\nto customers across the city",
+  "onboardingTitle2": "Real-time Navigation",
+  "onboardingDesc2": "Get turn-by-turn directions and live\ntraffic updates for every delivery",
+  "onboardingTitle3": "Safety First",
+  "onboardingDesc3": "Complete safety checklists and track all\ndeliveries with precision",
+  "onboardingTitle4": "Earn More",
+  "onboardingDesc4": "Track your earnings, deliveries, and\nperformance in real-time",
+
+  "loginWelcomeBack": "Welcome Back",
+  "loginSignInToContinue": "Sign in to continue",
+  "loginEmailAddress": "Email Address",
+  "loginEmailHint": "alex@example.com",
+  "loginPassword": "Password",
+  "loginPasswordHint": "Enter your password",
+  "loginForgotPassword": "Forgot Password?",
+  "loginSignIn": "Sign In",
+  "loginNoAccount": "Don't have an account? ",
+  "loginSignUp": "Sign Up",
+  "loginEmptyFields": "Please enter email and password",
+  "loginFailedVerification": "Failed to send verification code. Please try again.",
+  "loginUnexpectedError": "An unexpected error occurred",
+
+  "signUpCreateAccount": "Create Account",
+  "signUpGetStarted": "Sign up to get started",
+  "signUpFullName": "Full Name",
+  "signUpFullNameHint": "Alexander Pierce",
+  "signUpEmailAddress": "Email Address",
+  "signUpEmailHint": "alex@example.com",
+  "signUpPhoneNumber": "Phone Number",
+  "signUpPhoneHint": "+1 (555) 000-0000",
+  "signUpPassword": "Password",
+  "signUpPasswordHint": "Create a password",
+  "signUpConfirmPassword": "Confirm Password",
+  "signUpConfirmPasswordHint": "Confirm your password",
+  "signUpAgreeText": "I agree to the ",
+  "signUpTermsOfService": "Terms of Service",
+  "signUpAnd": " and ",
+  "signUpPrivacyPolicy": "Privacy Policy",
+  "signUpButton": "Create Account",
+  "signUpAlreadyAccount": "Already have an account? ",
+  "signUpSignIn": "Sign In",
+  "signUpFillAllFields": "Please fill all fields",
+  "signUpPasswordMismatch": "Passwords do not match",
+  "signUpAccountCreatedPartial": "Account created! But failed to send verification code. Please try to log in.",
+  "signUpUnexpectedError": "An unexpected error occurred",
+
+  "forgotPasswordTitle": "Forgot Password",
+  "forgotPasswordResetTitle": "Reset Password",
+  "forgotPasswordDesc": "Enter your registered email address and we will send you a link to reset your password.",
+  "forgotPasswordEmailAddress": "Email Address",
+  "forgotPasswordEmailHint": "alex@example.com",
+  "forgotPasswordEmailEmpty": "Please enter your email",
+  "forgotPasswordEmailInvalid": "Please enter a valid email address",
+  "forgotPasswordSendButton": "Send Reset Link",
+  "forgotPasswordCodeSent": "Verification code sent to your email!",
+  "forgotPasswordUnexpectedError": "An unexpected error occurred: ",
+
+  "otpVerifyEmail": "Verify Email",
+  "otpCodeSentTo": "We have sent a 6-digit code to\n",
+  "otpVerifyButton": "Verify Code",
+  "otpDidntReceive": "Didn't receive the code?",
+  "otpResendIn": "Resend code in {seconds}s",
+  "@otpResendIn": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "otpResendOtp": "Resend OTP",
+  "otpEnterFull": "Please enter the full 6-digit code",
+  "otpVerificationSuccessful": "Verification Successful!",
+  "otpInvalidExpired": "Invalid or expired OTP. Please try again.",
+  "otpNewSent": "A new OTP has been sent to your email",
+  "otpResendFailed": "Failed to resend OTP. Please try again later.",
+
+  "updatePasswordTitle": "Update Password",
+  "updatePasswordCreateNew": "Create New Password",
+  "updatePasswordDesc": "Your new password must be different from previous used passwords.",
+  "updatePasswordNewLabel": "New Password",
+  "updatePasswordNewHint": "Enter new password",
+  "updatePasswordConfirmLabel": "Confirm New Password",
+  "updatePasswordConfirmHint": "Confirm new password",
+  "updatePasswordButton": "Update Password",
+  "updatePasswordSuccess": "Password updated successfully! Please log in.",
+  "updatePasswordEmpty": "Please enter a new password",
+  "updatePasswordTooShort": "Password must be at least 6 characters long",
+  "updatePasswordConfirmEmpty": "Please confirm your new password",
+  "updatePasswordMismatch": "Passwords do not match",
+
+  "profileSetupTitle": "Complete Your Profile",
+  "profileSetupDesc": "Review your details and add a profile photo so customers can identify you.",
+  "profileSetupTapToAdd": "Tap to add / change profile photo",
+  "profileSetupFullName": "Full Name",
+  "profileSetupFullNameHint": "e.g. Ahmed Khan",
+  "profileSetupPhoneNumber": "Phone Number",
+  "profileSetupPhoneHint": "+92 300 0000000",
+  "profileSetupSaveContinue": "Save & Continue",
+  "profileSetupNameRequired": "Please enter your full name",
+  "profileSetupNameTooShort": "Name must be at least 3 characters",
+  "profileSetupPhoneRequired": "Please enter your phone number",
+  "profileSetupPhoneInvalid": "Enter a valid phone number",
+  "profileSetupPhotoError": "Could not select photo: ",
+  "profileSetupSaveError": "Failed to save profile: ",
+  "profileSetupChoosePhoto": "Choose Photo",
+  "profileSetupTakePhoto": "Take a photo",
+  "profileSetupChooseGallery": "Choose from gallery",
+
+  "vehicleDetailsTitle": "Vehicle Details",
+  "vehicleDetailsDesc": "Register your fuel tanker to start receiving\ndelivery requests.",
+  "vehicleDetailsMake": "Vehicle Make",
+  "vehicleDetailsMakeHint": "e.g. Ford, Mercedes, Isuzu",
+  "vehicleDetailsModel": "Model / Variant",
+  "vehicleDetailsModelHint": "e.g. F-550 Fuel Tanker",
+  "vehicleDetailsYear": "Year",
+  "vehicleDetailsYearHint": "2023",
+  "vehicleDetailsLicense": "License Plate",
+  "vehicleDetailsLicenseHint": "ABC-1234",
+  "vehicleDetailsSaveProceed": "Save & Proceed",
+  "vehicleDetailsMakeRequired": "Please enter make",
+  "vehicleDetailsModelRequired": "Please enter model",
+  "vehicleDetailsRequired": "Required",
+  "vehicleDetailsSessionLost": "Session lost. Please log in again.",
+  "vehicleDetailsLogIn": "Log In",
+  "vehicleDetailsSaveError": "Failed to save vehicle details: ",
+
+  "docVerificationTitle": "Document Verification",
+  "docVerificationDesc": "Upload required documents to complete\nregistration",
+  "docVerificationDriversLicense": "Driver's License",
+  "docVerificationDriversLicenseDesc": "Valid government-issued ID",
+  "docVerificationCommercialLicense": "Commercial License",
+  "docVerificationCommercialLicenseDesc": "CDL or equivalent certification",
+  "docVerificationVehicleReg": "Vehicle Registration",
+  "docVerificationVehicleRegDesc": "Current vehicle registration",
+  "docVerificationInsurance": "Insurance Certificate",
+  "docVerificationInsuranceDesc": "Valid commercial insurance",
+  "docVerificationBackground": "Background Check",
+  "docVerificationBackgroundDesc": "Consent for background verification",
+  "docVerificationUploaded": "Uploaded",
+  "docVerificationUploadFile": "Upload File",
+  "docVerificationCompleteReg": "Complete Registration",
+  "docVerificationUploadAll": "Please upload all required documents to continue",
+  "docVerificationAttached": "Document {number} attached successfully!",
+  "@docVerificationAttached": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "docVerificationFailed": "Failed to select document: ",
+
+  "dashboardDelivers": "Delivers",
+  "dashboardActive": "Active",
+  "dashboardOffline": "Offline",
+  "dashboardReceivingOrders": "Receiving Orders",
+  "dashboardGoOnline": "Go Online",
+  "dashboardFuelCapacity": "Fuel Capacity",
+  "dashboardLoading": "Loading...",
+  "dashboardEmpty": "Empty",
+  "dashboardActiveDelivery": "Active Delivery",
+  "dashboardAvailableStatus": "Available Status",
+  "dashboardNearbyOrders": "Nearby Orders",
+  "dashboardNoActiveOrder": "No active order",
+  "dashboardReadyToAccept": "Ready to accept orders",
+  "dashboardNavigate": "Navigate",
+  "dashboardAccept": "Accept",
+  "dashboardCustomer": "Customer",
+  "dashboardOrderNoLongerAvailable": "Order no longer available.",
+  "dashboardOrderTakenByAnother": "Sorry, this order was just accepted by another driver.",
+  "dashboardOrderAccepted": "Order accepted! Tap 'Navigate' to start delivery.",
+  "dashboardFailedUpdateStatus": "Failed to update status. Please check your connection.",
+  "dashboardEmergencyAlert": "Emergency alert sent! Order moved to Emergency queue.",
+  "dashboardFailedEmergency": "Failed to trigger emergency: ",
+  "dashboardFailedAction": "Failed: ",
+  "dashboardCannotDialer": "Could not launch phone dialer",
+  "dashboardEmergencyTitle": "Emergency Alert",
+  "dashboardEmergencyPrompt": "Are you sure you want to trigger an emergency alert? This will notify dispatch immediately.",
+  "dashboardEmergencyConfirm": "Send Alert",
+  "dashboardEmergencySubtitle": "Tap and hold in case of fuel spill,\nfire, or accident.",
+  "dashboardScheduledWarning": "Scheduled order. You can start this delivery 1 hour before the scheduled time (Scheduled for: {time}).",
+  "@dashboardScheduledWarning": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "dashboardContact": "Contact",
+  "dashboardOpenMaps": "Open in Google Maps",
+  "dashboardOpenMapsError": "Could not open Google Maps.",
+  "dashboardNoGps": "No GPS coordinates for this order yet.",
+  "dashboardSearchingNearby": "Searching for nearby orders...",
+  "dashboardSearchingNearbyDesc": "New orders within 25 km will appear here automatically.",
+  "dashboardViewAllOrders": "View All Orders",
+  "dashboardViewAllText": "View All",
+  "dashboardStatusAvailable": "AVAILABLE",
+  "dashboardStatusAssigned": "ASSIGNED",
+  "dashboardAccepting": "Accepting...",
+  "dashboardAcceptOrder": "Accept Order",
+  "dashboardOfflineCardTitle": "You are currently offline",
+  "dashboardOfflineCardDesc": "Toggle your status top-right to start receiving deliveries.",
+  "dashboardNoPhone": "Customer phone number not available.",
+  "dashboardMilesAway": "{miles} miles away",
+  "@dashboardMilesAway": {
+    "placeholders": {
+      "miles": {
+        "type": "String"
+      }
+    }
+  },
+  "dashboardMetersAway": "{meters} m away",
+  "@dashboardMetersAway": {
+    "placeholders": {
+      "meters": {
+        "type": "int"
+      }
+    }
+  },
+  "dashboardKmAway": "{km} km away",
+  "@dashboardKmAway": {
+    "placeholders": {
+      "km": {
+        "type": "String"
+      }
+    }
+  },
+  "dashboardOrdersCount": "{count} {count, plural, =1{order} other{orders}} within 25 km",
+  "@dashboardOrdersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+
+  "settingsTitle": "Settings",
+  "settingsFuelDeliveryPartner": "Fuel Delivery Partner",
+  "settingsAppPreferences": "APP PREFERENCES",
+  "settingsAppLanguage": "App Language",
+  "settingsPushNotifications": "Push Notifications",
+  "settingsAccountSupport": "ACCOUNT & SUPPORT",
+  "settingsHelpCenter": "Help Center",
+  "settingsPrivacyPolicy": "Privacy Policy",
+  "settingsLogOut": "Log Out",
+  "settingsLogOutFailed": "Failed to log out. Please try again.",
+  "settingsProfileUpdated": "Profile picture updated successfully!",
+  "settingsProfileUploadFailed": "Failed to upload image: ",
+
+  "languageTitle": "App Language",
+  "languageEnglish": "English (US)",
+  "languageSpanish": "Español",
+
+  "helpCenterTitle": "Help Center",
+  "helpCenterHowCanWeHelp": "How can we help you?",
+  "helpCenterQ1": "How do I reset my password?",
+  "helpCenterA1": "To reset your password, click on \"Forgot Password\" on the login screen and follow the instructions sent to your email.",
+  "helpCenterQ2": "How do I update my profile?",
+  "helpCenterA2": "Go to the Settings screen, tap on your profile picture to upload a new one, and manage your preferences there.",
+  "helpCenterQ3": "What to do if an order is delayed?",
+  "helpCenterA3": "If an order is delayed, please use the in-app chat or push notification to alert the dispatch team or customer immediately.",
+  "helpCenterStillNeedHelp": "Still need help?",
+  "helpCenterContactSupport": "Contact Support",
+  "helpCenterContacting": "Contacting support...",
+
+  "privacyPolicyTitle": "Privacy Policy",
+  "privacyPolicy1Title": "1. Overview",
+  "privacyPolicy1Body": "Welcome to FuelDirect Driver App! Your privacy is very important to us. This policy outlines how we collect, use, and protect your personal data when you use our application.",
+  "privacyPolicy2Title": "2. Information We Collect",
+  "privacyPolicy2Body": "• Personal Information: Name, email address, phone number.\n• Location Data: We collect precise location data to coordinate fuel deliveries effectively.\n• Device Information: Device model, operating system, and unique identifiers.",
+  "privacyPolicy3Title": "3. How We Use Information",
+  "privacyPolicy3Body": "Data collected is used to optimize fuel drop-offs, track active deliveries, providing in-app guidance, and managing payments/earnings summaries in your dashboard.",
+  "privacyPolicy4Title": "4. Data Sharing",
+  "privacyPolicy4Body": "We do not sell your personal data. We may share it with verified partners to enhance delivery safety or as required by legal authorities.",
+  "privacyPolicy5Title": "5. Contact Us",
+  "privacyPolicy5Body": "For inquiries regarding our privacy policy, please contact us at support@fueldirect.com or through the Help Center in your settings.",
+
+  "chatTitle": "Chat",
+  "chatMessageHint": "Type a message...",
+  "chatSend": "Send",
+  "chatNoMessages": "No messages yet. Start the conversation!",
+
+  "notificationsTitle": "Notifications",
+  "notificationsEmpty": "No notifications yet",
+  "notificationsEmptyDesc": "You'll see your order updates and alerts here",
+
+  "orderHistoryTitle": "Order History",
+  "orderHistoryEmpty": "No completed orders yet",
+  "orderHistoryCompleted": "Completed",
+  "orderHistoryDelivered": "Delivered",
+
+  "earningsTitle": "Earnings",
+  "earningsToday": "Today",
+  "earningsWeek": "This Week",
+  "earningsMonth": "This Month",
+  "earningsTotal": "Total Earned",
+  "earningsDeliveries": "Deliveries",
+  "earningsRating": "Rating",
+
+  "common_cancel": "Cancel",
+  "common_confirm": "Confirm",
+  "common_save": "Save",
+  "common_close": "Close",
+  "common_retry": "Retry",
+  "common_ok": "OK",
+  "common_yes": "Yes",
+  "common_no": "No",
+  "common_loading": "Loading...",
+  "common_error": "An error occurred",
+  "common_success": "Success",
+  "common_back": "Back",
+  "common_next": "Next",
+  "common_submit": "Submit",
+  "common_done": "Done"
+}

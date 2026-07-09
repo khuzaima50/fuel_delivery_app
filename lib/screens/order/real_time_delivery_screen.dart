@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -79,12 +78,9 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
 
   // -- Directions API (direct HTTP call -- no third-party package) ----------
   final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
-  late final PolylinePoints _polylinePoints;
-
   @override
   void initState() {
     super.initState();
-    _polylinePoints = PolylinePoints(apiKey: _apiKey);
 
     // Marker animation controller
     _markerAnimController = AnimationController(
@@ -184,7 +180,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
       try {
         final fresh = await Supabase.instance.client
             .from('orders')
-            .select('*, profiles:user_id(phone_number)')
+            .select('*, profiles(phone_number)')
             .eq('id', orderId)
             .maybeSingle();
         if (fresh != null) {
@@ -286,10 +282,26 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
           _destinationMissing = false;
         });
       }
-      // Trigger first route once destination is known & we have GPS
-      if (_currentMarkerPos != null) {
-        final fakePos = await Geolocator.getLastKnownPosition();
-        if (fakePos != null && !_routeFetched) _fetchRoute(fakePos);
+      // Trigger route fetch now that destination is known.
+      // Prefer the current marker position (already on screen); fall back to
+      // last-known GPS fix so we don't have to wait for the stream.
+      if (!_routeFetched && !_isLoadingRoute) {
+        Position? gpsPos;
+        try {
+          // Try a fresh fix first (short timeout so we don't block)
+          gpsPos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 8),
+            ),
+          );
+        } catch (_) {
+          gpsPos = await Geolocator.getLastKnownPosition();
+        }
+        if (gpsPos != null && mounted && !_routeFetched) {
+          debugPrint('[Destination Loaded] Triggering route fetch from resolved destination');
+          _fetchRoute(gpsPos);
+        }
       }
     } else {
       debugPrint('[Destination ERROR] Missing lat/lng — cannot draw route');
@@ -379,16 +391,22 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     _currentMarkerPos = newLatLng;
 
     _markerAnimController?.reset();
-    _markerAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-          parent: _markerAnimController!, curve: Curves.easeInOut),
-    )..addListener(() {
-        if (!mounted) return;
-        final t = _markerAnim!.value;
-        final interp = _lerpLatLng(_prevMarkerPos!, _currentMarkerPos!, t);
-        _updateDriverMarker(interp, pos.heading);
-      });
-    _markerAnimController?.forward();
+    final prevPos = _prevMarkerPos;
+    final currPos = _currentMarkerPos;
+    if (prevPos != null && currPos != null && _markerAnimController != null) {
+      _markerAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+            parent: _markerAnimController!, curve: Curves.easeInOut),
+      )..addListener(() {
+          if (!mounted) return;
+          final t = _markerAnim?.value ?? 1.0;
+          final interp = _lerpLatLng(prevPos, currPos, t);
+          _updateDriverMarker(interp, pos.heading);
+        });
+      _markerAnimController?.forward();
+    } else {
+      _updateDriverMarker(newLatLng, pos.heading);
+    }
 
     // --- Stats ---------------------------------------------------------------
     if (_destLat != null && _destLng != null) {
@@ -467,6 +485,35 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     });
   }
 
+  // ── Google Directions API: decode encoded polyline string ─────────────────
+  List<LatLng> _decodePolyline(String encoded) {
+    final List<LatLng> points = [];
+    int index = 0;
+    final int len = encoded.length;
+    int lat = 0, lng = 0;
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dLat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dLat;
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dLng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dLng;
+      points.add(LatLng(lat / 1e5, lng / 1e5));
+    }
+    return points;
+  }
+
   // ── Stats (distance + ETA) ────────────────────────────────────────────────
   void _updateStats(Position pos) {
     final dLat = _destLat;
@@ -474,8 +521,14 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     if (dLat == null || dLng == null) return;
     final distM = Geolocator.distanceBetween(
         pos.latitude, pos.longitude, dLat, dLng);
-    final miles = distM / 1609.34;
-    final mins = math.max(1, (miles / 18.64 * 60.0).ceil()); // 30 km/h is approx 18.64 mph
+    _applyStats(distanceMeters: distM, durationSecs: null);
+  }
+
+  void _applyStats({required double distanceMeters, int? durationSecs}) {
+    final miles = distanceMeters / 1609.34;
+    final int mins = durationSecs != null
+        ? math.max(1, (durationSecs / 60).ceil())
+        : math.max(1, (miles / 18.64 * 60.0).ceil()); // 30 km/h fallback
     final arrival = DateTime.now().add(Duration(minutes: mins));
     final h = arrival.hour > 12
         ? arrival.hour - 12
@@ -505,21 +558,65 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     if (mounted) setState(() => _isLoadingRoute = true);
 
     try {
-      final result = await _polylinePoints.getRouteBetweenCoordinates(
-        // ignore: deprecated_member_use
-        request: PolylineRequest(
-          origin: PointLatLng(driverPos.latitude, driverPos.longitude),
-          destination: PointLatLng(dLat, dLng),
-          mode: TravelMode.driving,
-        ),
+      final uri = Uri.parse(
+        'https://maps.googleapis.com/maps/api/directions/json'
+        '?origin=${driverPos.latitude},${driverPos.longitude}'
+        '&destination=$dLat,$dLng'
+        '&mode=driving'
+        '&key=$_apiKey',
       );
 
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (!mounted) return;
 
-      if (result.points.isNotEmpty) {
+      if (response.statusCode != 200) {
+        debugPrint('[Route API Response] HTTP error ${response.statusCode}');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final status = data['status'] as String? ?? 'UNKNOWN';
+
+      if (status != 'OK') {
+        final errMsg = data['error_message'] as String? ?? 'no details';
+        debugPrint('[Route ERROR] API status=$status — $errMsg');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final routes = data['routes'] as List?;
+      if (routes == null || routes.isEmpty) {
+        debugPrint('[Route ERROR] No routes returned');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final legs = routes[0]['legs'] as List?;
+      int? apiDurationSecs;
+      double? apiDistanceMeters;
+      if (legs != null && legs.isNotEmpty) {
+        final leg = legs[0] as Map<String, dynamic>?;
+        apiDurationSecs = (leg?['duration_in_traffic']?['value'] as int?) ??
+            (leg?['duration']?['value'] as int?);
+        apiDistanceMeters = ((leg?['distance']?['value']) as num?)?.toDouble();
+      }
+
+      final encodedPolyline =
+          (routes[0]['overview_polyline']['points'] as String?) ?? '';
+
+      if (encodedPolyline.isEmpty) {
+        debugPrint('[Polyline ERROR] Empty polyline string');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final decodedPoints = _decodePolyline(encodedPolyline);
+
+      if (decodedPoints.isNotEmpty) {
         _routePoints
           ..clear()
-          ..addAll(result.points.map((p) => LatLng(p.latitude, p.longitude)));
+          ..addAll(decodedPoints);
 
         _markers.removeWhere((m) => m.markerId.value == 'destination');
         _markers.add(Marker(
@@ -547,8 +644,17 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
               endCap: Cap.roundCap,
             ));
         });
+
+        if (apiDistanceMeters != null && apiDistanceMeters > 0) {
+          _applyStats(
+            distanceMeters: apiDistanceMeters,
+            durationSecs: apiDurationSecs,
+          );
+        } else {
+          _updateStats(driverPos);
+        }
       } else {
-        debugPrint('[Route ERROR] No points returned: ${result.errorMessage}');
+        debugPrint('[Route ERROR] No points decoded');
         if (mounted) setState(() => _isLoadingRoute = false);
       }
     } catch (e) {
@@ -951,12 +1057,26 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                       children: [
                         CircleAvatar(
                           radius: 22,
-                          backgroundImage: NetworkImage(
-                            _customerAvatarUrl != null && _customerAvatarUrl!.isNotEmpty
-                                ? _customerAvatarUrl!
-                                : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=100&auto=format',
-                          ),
                           backgroundColor: const Color(0xFFEEEEEE),
+                          child: (_customerAvatarUrl != null && _customerAvatarUrl!.isNotEmpty)
+                              ? ClipOval(
+                                  child: Image.network(
+                                    _customerAvatarUrl!,
+                                    width: 44,
+                                    height: 44,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.person,
+                                      color: Color(0xFF888888),
+                                      size: 24,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.person,
+                                  color: Color(0xFF888888),
+                                  size: 24,
+                                ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(

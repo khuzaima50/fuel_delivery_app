@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'login_screen.dart';
@@ -29,22 +30,20 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
 
   Future<void> _submitVehicleDetails() async {
     if (!_formKey.currentState!.validate()) return;
-
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
 
     try {
       final auth = Supabase.instance.client.auth;
       final user = auth.currentUser ?? auth.currentSession?.user;
 
-      debugPrint('[Vehicle] Saving vehicle. User: ${user?.id}, Session: ${auth.currentSession != null}');
-
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Session lost. Please log in again.'),
+              content: Text(l10n.vehicleDetailsSessionLost),
               action: SnackBarAction(
-                label: 'Log In',
+                label: l10n.vehicleDetailsLogIn,
                 onPressed: () {
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -65,10 +64,6 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
       final year  = int.tryParse(_yearController.text.trim()) ?? DateTime.now().year;
       final plate = _plateController.text.trim().toUpperCase();
 
-      // 1. Upsert into driver_vehicles
-      //    Using upsert so retrying after a network error won't create duplicates.
-      //    Supabase upsert on (driver_id, license_plate) requires a unique index;
-      //    if that doesn't exist yet, the SQL migration adds it.
       try {
         await Supabase.instance.client.from('driver_vehicles').upsert({
           'driver_id':     user.id,
@@ -78,10 +73,7 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
           'license_plate': plate,
           'updated_at':    DateTime.now().toUtc().toIso8601String(),
         }, onConflict: 'driver_id, license_plate');
-        debugPrint('[Vehicle] driver_vehicles upserted ✓');
       } catch (vehicleErr) {
-        debugPrint('[Vehicle] driver_vehicles error: $vehicleErr');
-        // If the unique conflict index doesn't exist yet, fall back to plain insert
         await Supabase.instance.client.from('driver_vehicles').insert({
           'driver_id':     user.id,
           'make':          make,
@@ -89,10 +81,8 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
           'year':          year,
           'license_plate': plate,
         });
-        debugPrint('[Vehicle] driver_vehicles inserted (fallback) ✓');
       }
 
-      // 2. Update drivers table with vehicle_type representation
       final vehicleType = '$make $model ($plate)';
       try {
         await Supabase.instance.client
@@ -102,11 +92,7 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
               'updated_at':   DateTime.now().toUtc().toIso8601String(),
             })
             .eq('id', user.id);
-        debugPrint('[Vehicle] drivers.vehicle_type updated ✓');
-      } catch (driverErr) {
-        debugPrint('[Vehicle] drivers update error (non-fatal): $driverErr');
-        // Non-fatal — the vehicle row is already saved. Continue.
-      }
+      } catch (_) {}
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -114,11 +100,10 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
         );
       }
     } catch (e) {
-      debugPrint('[Vehicle] Submit failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save vehicle details: $e'),
+            content: Text('${AppLocalizations.of(context)!.vehicleDetailsSaveError}$e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -130,6 +115,7 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
       body: SafeArea(
@@ -141,68 +127,68 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 40),
-                const Text(
-                  'Vehicle Details',
-                  style: TextStyle(
+                Text(
+                  l10n.vehicleDetailsTitle,
+                  style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Register your fuel tanker to start receiving\ndelivery requests.',
-                  style: TextStyle(
+                Text(
+                  l10n.vehicleDetailsDesc,
+                  style: const TextStyle(
                     fontSize: 15,
                     color: Color(0xFF666666),
                     height: 1.4,
                   ),
                 ),
                 const SizedBox(height: 32),
-                
+
                 _buildTextField(
-                  label: 'Vehicle Make',
-                  hint: 'e.g. Ford, Mercedes, Isuzu',
+                  label: l10n.vehicleDetailsMake,
+                  hint: l10n.vehicleDetailsMakeHint,
                   controller: _makeController,
                   icon: Icons.directions_car_filled_outlined,
-                  validator: (v) => v!.isEmpty ? 'Please enter make' : null,
+                  validator: (v) => v!.isEmpty ? l10n.vehicleDetailsMakeRequired : null,
                 ),
                 const SizedBox(height: 20),
-                
+
                 _buildTextField(
-                  label: 'Model / Variant',
-                  hint: 'e.g. F-550 Fuel Tanker',
+                  label: l10n.vehicleDetailsModel,
+                  hint: l10n.vehicleDetailsModelHint,
                   controller: _modelController,
                   icon: Icons.local_shipping_outlined,
-                  validator: (v) => v!.isEmpty ? 'Please enter model' : null,
+                  validator: (v) => v!.isEmpty ? l10n.vehicleDetailsModelRequired : null,
                 ),
                 const SizedBox(height: 20),
-                
+
                 Row(
                   children: [
                     Expanded(
                       child: _buildTextField(
-                        label: 'Year',
-                        hint: '2023',
+                        label: l10n.vehicleDetailsYear,
+                        hint: l10n.vehicleDetailsYearHint,
                         controller: _yearController,
                         keyboardType: TextInputType.number,
                         icon: Icons.calendar_today_outlined,
-                        validator: (v) => v!.isEmpty ? 'Req' : null,
+                        validator: (v) => v!.isEmpty ? l10n.vehicleDetailsRequired : null,
                       ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: _buildTextField(
-                        label: 'License Plate',
-                        hint: 'ABC-1234',
+                        label: l10n.vehicleDetailsLicense,
+                        hint: l10n.vehicleDetailsLicenseHint,
                         controller: _plateController,
                         icon: Icons.badge_outlined,
-                        validator: (v) => v!.isEmpty ? 'Req' : null,
+                        validator: (v) => v!.isEmpty ? l10n.vehicleDetailsRequired : null,
                       ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 48),
                 SizedBox(
                   width: double.infinity,
@@ -217,12 +203,12 @@ class _VehicleInfoScreenState extends State<VehicleInfoScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: _isLoading 
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Save & Proceed',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                        ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text(
+                            l10n.vehicleDetailsSaveProceed,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 24),

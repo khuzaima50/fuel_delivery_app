@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'profile_setup_screen.dart';
@@ -12,12 +13,12 @@ class DocumentVerificationScreen extends StatefulWidget {
 }
 
 class _DocumentVerificationScreenState extends State<DocumentVerificationScreen> {
-  // Track upload status for 5 documents
   final List<bool> _uploadedDocs = [false, false, false, false, false];
 
   bool get _allUploaded => _uploadedDocs.every((status) => status);
 
   Future<void> _onUpload(int index, {bool isCamera = false}) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final picker = ImagePicker();
       final XFile? image = await picker.pickImage(
@@ -28,7 +29,6 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
       );
 
       if (image != null && mounted) {
-        // Find current user safely
         final user = Supabase.instance.client.auth.currentUser;
         if (user != null) {
           final file = File(image.path);
@@ -36,7 +36,6 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
           final fileName = '${user.id}_doc_${index}_${DateTime.now().millisecondsSinceEpoch}.$fileExt';
           final filePath = '${user.id}/$fileName';
 
-          // Upload to Supabase Storage bucket 'driver_documents'
           await Supabase.instance.client.storage
               .from('driver_documents')
               .upload(filePath, file);
@@ -46,10 +45,10 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
           setState(() {
             _uploadedDocs[index] = true;
           });
-          
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Document ${index + 1} attached successfully!"),
+              content: Text(l10n.docVerificationAttached(index + 1)),
               duration: const Duration(seconds: 2),
               backgroundColor: Colors.green,
             ),
@@ -60,7 +59,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to select document: $e"),
+            content: Text('${AppLocalizations.of(context)!.docVerificationFailed}$e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -70,6 +69,17 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    // Document list — localized
+    final List<Map<String, String>> documents = [
+      {'title': l10n.docVerificationDriversLicense, 'subtitle': l10n.docVerificationDriversLicenseDesc},
+      {'title': l10n.docVerificationCommercialLicense, 'subtitle': l10n.docVerificationCommercialLicenseDesc},
+      {'title': l10n.docVerificationVehicleReg, 'subtitle': l10n.docVerificationVehicleRegDesc},
+      {'title': l10n.docVerificationInsurance, 'subtitle': l10n.docVerificationInsuranceDesc},
+      {'title': l10n.docVerificationBackground, 'subtitle': l10n.docVerificationBackgroundDesc},
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
       body: SafeArea(
@@ -83,19 +93,19 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
-                    'Document Verification',
-                    style: TextStyle(
+                    l10n.docVerificationTitle,
+                    style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF1F1F1F),
                     ),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'Upload required documents to complete\nregistration',
-                    style: TextStyle(
+                    l10n.docVerificationDesc,
+                    style: const TextStyle(
                       fontSize: 15,
                       color: Color(0xFF666666),
                       fontWeight: FontWeight.w400,
@@ -109,31 +119,13 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 children: [
-                  _buildDocumentCard(
-                    0,
-                    "Driver's License",
-                    "Valid government-issued ID",
-                  ),
-                  _buildDocumentCard(
-                    1,
-                    "Commercial License",
-                    "CDL or equivalent certification",
-                  ),
-                  _buildDocumentCard(
-                    2,
-                    "Vehicle Registration",
-                    "Current vehicle registration",
-                  ),
-                  _buildDocumentCard(
-                    3,
-                    "Insurance Certificate",
-                    "Valid commercial insurance",
-                  ),
-                  _buildDocumentCard(
-                    4,
-                    "Background Check",
-                    "Consent for background verification",
-                  ),
+                  for (int i = 0; i < documents.length; i++)
+                    _buildDocumentCard(
+                      i,
+                      documents[i]['title']!,
+                      documents[i]['subtitle']!,
+                      l10n,
+                    ),
                   const SizedBox(height: 20),
                 ],
               ),
@@ -146,10 +138,8 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                 child: ElevatedButton(
                   onPressed: () async {
                     if (_allUploaded) {
-                      // Capture navigator before async gap
                       final navigator = Navigator.of(context);
 
-                      // Mark documents as submitted in the database
                       try {
                         final user = Supabase.instance.client.auth.currentUser;
                         if (user != null) {
@@ -163,7 +153,6 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                         }
                       } catch (e) {
                         debugPrint('[Docs] Could not update documents_submitted flag: $e');
-                        // Non-fatal — continue navigation
                       }
 
                       if (mounted) {
@@ -175,8 +164,8 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                       }
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Please upload all required documents to continue"),
+                        SnackBar(
+                          content: Text(l10n.docVerificationUploadAll),
                           backgroundColor: Colors.redAccent,
                         ),
                       );
@@ -190,9 +179,9 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'Complete Registration',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  child: Text(
+                    l10n.docVerificationCompleteReg,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -203,22 +192,18 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
     );
   }
 
-  Widget _buildDocumentCard(
-    int index,
-    String title,
-    String subtitle,
-  ) {
+  Widget _buildDocumentCard(int index, String title, String subtitle, AppLocalizations l10n) {
     final isUploaded = _uploadedDocs[index];
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: isUploaded 
-          ? Border.all(color: const Color(0xFFFF4D00), width: 1.5)
-          : null,
+        border: isUploaded
+            ? Border.all(color: const Color(0xFFFF4D00), width: 1.5)
+            : null,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,16 +216,16 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: isUploaded 
-                ? const Icon(Icons.check, color: Colors.white, size: 24)
-                : Text(
-                    (index + 1).toString(),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1F1F1F),
+              child: isUploaded
+                  ? const Icon(Icons.check, color: Colors.white, size: 24)
+                  : Text(
+                      (index + 1).toString(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F1F1F),
+                      ),
                     ),
-                  ),
             ),
           ),
           const SizedBox(width: 16),
@@ -278,7 +263,7 @@ class _DocumentVerificationScreenState extends State<DocumentVerificationScreen>
                             size: 18,
                           ),
                           label: Text(
-                            isUploaded ? 'Uploaded' : 'Upload File',
+                            isUploaded ? l10n.docVerificationUploaded : l10n.docVerificationUploadFile,
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,

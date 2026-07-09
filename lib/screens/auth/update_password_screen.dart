@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 
@@ -13,32 +14,30 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  
+
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
 
   Future<void> _updatePassword() async {
     if (!_formKey.currentState!.validate()) return;
-
+    final l10n = AppLocalizations.of(context)!;
     final newPassword = _newPasswordController.text;
 
     setState(() => _isLoading = true);
 
     try {
-      // Update the user's password using Supabase Auth
       await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: newPassword),
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password updated successfully! Please log in.'),
-            backgroundColor: Color(0xFF4CAF50),
+          SnackBar(
+            content: Text(l10n.updatePasswordSuccess),
+            backgroundColor: const Color(0xFF4CAF50),
           ),
         );
-        // Navigate back to Login and remove all other screens from the stack
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
           (route) => false,
@@ -57,7 +56,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('An unexpected error occurred: $e'),
+            content: Text('${AppLocalizations.of(context)!.forgotPasswordUnexpectedError}$e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -76,14 +75,15 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Update Password',
-          style: TextStyle(
+        title: Text(
+          l10n.updatePasswordTitle,
+          style: const TextStyle(
             color: Color(0xFF1F1F1F),
             fontSize: 18,
             fontWeight: FontWeight.w800,
@@ -100,9 +100,9 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                const Text(
-                  'Create New Password',
-                  style: TextStyle(
+                Text(
+                  l10n.updatePasswordCreateNew,
+                  style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -110,9 +110,9 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Your new password must be different from previous used passwords.',
-                  style: TextStyle(
+                Text(
+                  l10n.updatePasswordDesc,
+                  style: const TextStyle(
                     fontSize: 16,
                     color: Color(0xFF666666),
                     fontWeight: FontWeight.w400,
@@ -120,13 +120,12 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-                
-                // New Password Field
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 10.0),
+
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10.0),
                   child: Text(
-                    'New Password',
-                    style: TextStyle(
+                    l10n.updatePasswordNewLabel,
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF444444),
@@ -135,28 +134,23 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                 ),
                 _buildPasswordField(
                   controller: _newPasswordController,
-                  hint: 'Enter new password',
+                  hint: l10n.updatePasswordNewHint,
                   obscureText: _obscureNew,
                   onToggleVisibility: () => setState(() => _obscureNew = !_obscureNew),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a new password';
-                    }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters long';
-                    }
+                    if (value == null || value.isEmpty) return l10n.updatePasswordEmpty;
+                    if (value.length < 6) return l10n.updatePasswordTooShort;
                     return null;
                   },
                 ),
-                
+
                 const SizedBox(height: 24),
-                
-                // Confirm Password Field
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 10.0),
+
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10.0),
                   child: Text(
-                    'Confirm New Password',
-                    style: TextStyle(
+                    l10n.updatePasswordConfirmLabel,
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF444444),
@@ -165,23 +159,18 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                 ),
                 _buildPasswordField(
                   controller: _confirmPasswordController,
-                  hint: 'Confirm new password',
+                  hint: l10n.updatePasswordConfirmHint,
                   obscureText: _obscureConfirm,
                   onToggleVisibility: () => setState(() => _obscureConfirm = !_obscureConfirm),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your new password';
-                    }
-                    if (value != _newPasswordController.text) {
-                      return 'Passwords do not match';
-                    }
+                    if (value == null || value.isEmpty) return l10n.updatePasswordConfirmEmpty;
+                    if (value != _newPasswordController.text) return l10n.updatePasswordMismatch;
                     return null;
                   },
                 ),
-                
+
                 const SizedBox(height: 40),
-                
-                // Update Password Button
+
                 SizedBox(
                   width: double.infinity,
                   height: 58,
@@ -198,9 +187,9 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'Update Password',
-                            style: TextStyle(
+                        : Text(
+                            l10n.updatePasswordButton,
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),

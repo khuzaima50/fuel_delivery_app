@@ -288,7 +288,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
             ));
         });
       } else {
-        debugPrint('[Route Fetch] OrderTracking: No points returned');
+        debugPrint('[Route Fetch] OrderTracking: No points returned — Error: ${result.errorMessage ?? "no details"}');
         if (mounted) setState(() => _isLoadingRoute = false);
       }
     } catch (e) {

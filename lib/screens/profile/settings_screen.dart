@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../dashboard/dashboard_screen.dart';
 import 'language_screen.dart';
 import 'help_center_screen.dart';
 import 'privacy_policy_screen.dart';
+import '../../services/locale_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -41,18 +43,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  String _getLanguageName(String code) {
-    switch (code) {
-      case 'es': return 'Español';
-      case 'fr': return 'Français';
-      case 'de': return 'Deutsch';
-      case 'ar': return 'العربية';
-      case 'en':
-      default:
-        return 'English (US)';
-    }
-  }
-
   Future<void> _updatePreference(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(key, value);
@@ -82,6 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _uploadProfilePicture() async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final picker = ImagePicker();
       final XFile? image = await picker.pickImage(
@@ -126,14 +117,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _isUploading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile picture updated successfully!')),
+          SnackBar(content: Text(l10n.settingsProfileUpdated)),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload image: $e')),
+          SnackBar(content: Text('${l10n.settingsProfileUploadFailed}$e')),
         );
       }
     }
@@ -141,6 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -181,9 +173,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          title: const Text(
-            'Settings',
-            style: TextStyle(
+          title: Text(
+            l10n.settingsTitle,
+            style: const TextStyle(
               color: Color(0xFF1F1F1F),
               fontSize: 16,
               fontWeight: FontWeight.w800,
@@ -245,9 +237,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            'Fuel Delivery Partner',
-                            style: TextStyle(
+                          Text(
+                            l10n.settingsFuelDeliveryPartner,
+                            style: const TextStyle(
                               fontSize: 13,
                               color: Color(0xFF888888),
                               fontWeight: FontWeight.w500,
@@ -269,9 +261,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 40),
 
-                const Text(
-                  'APP PREFERENCES',
-                  style: TextStyle(
+                Text(
+                  l10n.settingsAppPreferences,
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF888888),
@@ -282,11 +274,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 _buildSettingItem(
                   icon: Icons.language,
-                  title: 'App Language',
+                  title: l10n.settingsAppLanguage,
                   onTap: () async {
                     final newLang = await Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => LanguageScreen(currentLanguage: _currentLanguageCode),
+                        builder: (context) => const LanguageScreen(),
                       ),
                     );
                     if (newLang != null && newLang is String) {
@@ -299,7 +291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _getLanguageName(_currentLanguageCode),
+                        LocaleService.getLanguageName(_currentLanguageCode),
                         style: const TextStyle(
                           fontSize: 13,
                           color: Color(0xFFBDBDBD),
@@ -318,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _buildSettingItem(
                   icon: Icons.notifications_none_rounded,
-                  title: 'Push Notifications',
+                  title: l10n.settingsPushNotifications,
                   trailing: Transform.scale(
                     scale: 0.8,
                     child: Switch(
@@ -335,9 +327,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 32),
 
-                const Text(
-                  'ACCOUNT & SUPPORT',
-                  style: TextStyle(
+                Text(
+                  l10n.settingsAccountSupport,
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF888888),
@@ -348,7 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 _buildSettingItem(
                   icon: Icons.help_outline_rounded,
-                  title: 'Help Center',
+                  title: l10n.settingsHelpCenter,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => const HelpCenterScreen()),
@@ -363,7 +355,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _buildSettingItem(
                   icon: Icons.shield_outlined,
-                  title: 'Privacy Policy',
+                  title: l10n.settingsPrivacyPolicy,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
@@ -402,7 +394,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to log out. Please try again.')),
+                            SnackBar(content: Text(l10n.settingsLogOutFailed)),
                           );
                         }
                       }
@@ -410,16 +402,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     borderRadius: BorderRadius.circular(12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(
+                      children: [
+                        const Icon(
                           Icons.logout_rounded,
                           color: Color(0xFFFF4D4D),
                           size: 20,
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 12),
                         Text(
-                          'Log Out',
-                          style: TextStyle(
+                          l10n.settingsLogOut,
+                          style: const TextStyle(
                             color: Color(0xFFFF4D4D),
                             fontSize: 16,
                             fontWeight: FontWeight.w700,

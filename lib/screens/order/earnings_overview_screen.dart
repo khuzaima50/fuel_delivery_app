@@ -4,6 +4,12 @@ import '../../widgets/floating_bottom_nav_bar.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'earnings_history_screen.dart';
 import 'order_details_screen.dart';
+import '../../services/wallet_service.dart';
+import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'dart:io';
+import 'dart:convert';
 
 class EarningsOverviewScreen extends StatefulWidget {
   const EarningsOverviewScreen({super.key});
@@ -14,11 +20,71 @@ class EarningsOverviewScreen extends StatefulWidget {
 
 class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
   late Future<List<Map<String, dynamic>>> _ordersFuture;
+  double _walletBalance = 0.0;
+
+  bool? _isStripeLinked;
+  RealtimeChannel? _orderChannel;
 
   @override
   void initState() {
     super.initState();
+    _loadData();
+    _setupRealtime();
+  }
+
+  @override
+  void dispose() {
+    _orderChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  void _setupRealtime() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    _orderChannel = Supabase.instance.client.channel('public:orders_driver_$userId');
+    _orderChannel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'orders',
+          // No filter string – we will manually verify driver_id in callback
+          callback: (payload) {
+            final newRecord = payload.newRecord;
+            // Ensure this update belongs to the current driver
+            if (newRecord['driver_id']?.toString() != userId) return;
+            final status = newRecord['status']?.toString().toLowerCase();
+            if (status == 'completed' || status == 'delivered') {
+              if (mounted) {
+                setState(() {
+                  _loadData();
+                });
+              }
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _loadData() async {
     _loadOrders();
+    await _loadBalance();
+    await _checkStripe();
+  }
+
+  Future<void> _checkStripe() async {
+    final status = await WalletService.checkStripeStatus();
+    if (mounted) {
+      setState(() => _isStripeLinked = status);
+    }
+  }
+
+  Future<void> _loadBalance() async {
+    final balance = await WalletService.getWalletBalance();
+    if (mounted) {
+      setState(() {
+        _walletBalance = balance;
+      });
+    }
   }
 
   void _loadOrders() {
@@ -28,14 +94,19 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
           .from('orders')
           .select()
           .eq('driver_id', user.id)
-          .inFilter('status', ['completed', 'delivered'])
+          .inFilter('status', ['completed', 'delivered', 'COMPLETED', 'DELIVERED'])
           .order('created_at', ascending: false)
           .then((data) {
+            try {
+              File('orders_debug.json').writeAsStringSync(jsonEncode(data));
+            } catch (e) {
+              debugPrint('Failed to write debug file: $e');
+            }
             // Sort completed orders — those with completed_at first, then fallback to created_at
             final list = List<Map<String, dynamic>>.from(data);
             list.sort((a, b) {
-              final aTime = a['completed_at'] ?? a['created_at'];
-              final bTime = b['completed_at'] ?? b['created_at'];
+              final aTime = a['completed_at'] ?? a['delivered_at'] ?? a['updated_at'] ?? a['created_at'];
+              final bTime = b['completed_at'] ?? b['delivered_at'] ?? b['updated_at'] ?? b['created_at'];
               if (aTime == null) return 1;
               if (bTime == null) return -1;
               return bTime.toString().compareTo(aTime.toString());
@@ -120,7 +191,6 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
             return status == 'completed' || status == 'delivered';
           }).toList();
 
-          double totalEarnings = 0.0;
           double todayEarnings = 0.0;
           // Single 'now' reference used everywhere
           final now = DateTime.now();
@@ -128,13 +198,14 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
           for (var order in orders) {
             final raw = order['driver_earning'] ?? order['total_amount'] ?? '0';
             final amount = double.tryParse(raw.toString()) ?? 0.0;
-            totalEarnings += amount;
 
-            // Use completed_at if available, fall back to created_at for "today" check
-            final timeField = order['completed_at'] ?? order['created_at'];
+            final timeField = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
             if (timeField != null) {
               try {
-                final d = DateTime.parse(timeField.toString()).toLocal();
+                var d = DateTime.parse(timeField.toString()).toLocal();
+                if (d.isAfter(now)) {
+                  d = now;
+                }
                 if (d.year == now.year && d.month == now.month && d.day == now.day) {
                   todayEarnings += amount;
                 }
@@ -143,16 +214,20 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
           }
 
           final int deliveries = orders.length;
-          // Recent Deliveries = only TODAY's orders
-          final List<Map<String, dynamic>> recentOrders = orders.where((o) {
-            if (o['completed_at'] == null) return false;
+          // Filter recent orders to show only within the last 3 days (72 hours)
+          final List<Map<String, dynamic>> recentOrders = orders.where((order) {
+            final timeField = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
+            if (timeField == null) return false;
             try {
-              final d = DateTime.parse(o['completed_at']).toLocal();
-              return d.year == now.year && d.month == now.month && d.day == now.day;
+              var d = DateTime.parse(timeField.toString()).toLocal();
+              if (d.isAfter(now)) {
+                d = now;
+              }
+              return d.isAfter(now.subtract(const Duration(days: 3)));
             } catch (_) {
               return false;
             }
-          }).take(5).toList();
+          }).toList();
 
           // ── Weekly chart data (Mon–Sun of the current week) ──
           final startOfWeek =
@@ -161,15 +236,19 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
           double weeklyTotal = 0.0;
 
           for (final order in orders) {
-            if (order['completed_at'] != null) {
+            final timeField = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
+            if (timeField != null) {
               try {
-                final d = DateTime.parse(order['completed_at']).toLocal();
+                var d = DateTime.parse(timeField.toString()).toLocal();
+                if (d.isAfter(now)) {
+                  d = now;
+                }
                 final orderDay = DateTime(d.year, d.month, d.day);
                 final weekEnd = startOfWeek.add(const Duration(days: 7));
                 // Check if this order is within current week (Mon to Sun)
                 if (!orderDay.isBefore(startOfWeek) && orderDay.isBefore(weekEnd)) {
-                  final amount =
-                      double.tryParse(order['total_amount']?.toString() ?? '0') ?? 0.0;
+                  final rawEarning = order['driver_earning'] ?? order['total_amount'] ?? '0';
+                  final amount = double.tryParse(rawEarning.toString()) ?? 0.0;
                   weeklyEarnings[d.weekday] = (weeklyEarnings[d.weekday] ?? 0) + amount;
                   weeklyTotal += amount;
                 }
@@ -177,8 +256,8 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
             }
           }
 
-          // Find max for normalization
-          final maxEarning = weeklyEarnings.values.fold(0.0, (a, b) => a > b ? a : b);
+          // Find max for normalization (with a minimum of 1.0 to avoid division by zero)
+          final maxEarning = weeklyEarnings.values.fold(1.0, (a, b) => a > b ? a : b);
           final todayWeekday = now.weekday; // 1=Mon, 7=Sun
 
           return Column(
@@ -189,7 +268,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                   color: const Color(0xFFFF4D00),
                   onRefresh: () async {
                     setState(() {
-                      _loadOrders();
+                      _loadData();
                     });
                     await _ordersFuture;
                   },
@@ -222,7 +301,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                 Column(
                                   children: [
                                     const Text(
-                                      'TOTAL EARNINGS',
+                                      'WALLET BALANCE',
                                       style: TextStyle(
                                         fontSize: 10,
                                         color: Color(0xFF888888),
@@ -232,7 +311,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '\$${totalEarnings.toStringAsFixed(2)}',
+                                      '\$${_walletBalance.toStringAsFixed(2)}',
                                       style: const TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.w900,
@@ -270,6 +349,67 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                         ),
                       ),
                       const SizedBox(height: 20),
+
+                      // Stripe Onboarding Card
+                      if (_isStripeLinked == false)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF3E0),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFFFB74D), width: 1),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100)),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Action Required',
+                                    style: TextStyle(
+                                      color: Color(0xFFE65100),
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'Please link your bank account via Stripe to enable payouts.',
+                                style: TextStyle(
+                                  color: Color(0xFF5D4037),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 44,
+                                child: ElevatedButton(
+                                  onPressed: _startStripeOnboarding,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFE65100),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: const Text(
+                                    'Link Bank Account',
+                                    style: TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_isStripeLinked == false) const SizedBox(height: 20),
 
                       // Weekly Chart Card (Static for visualization)
                       Container(
@@ -463,9 +603,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                   width: double.infinity,
                   height: 58,
                   child: ElevatedButton(
-                    onPressed: () {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payout requested!')));
-                    },
+                    onPressed: (_walletBalance > 0 && _isStripeLinked == true) ? () => _showCashOutDialog(context) : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF4D00),
                       foregroundColor: Colors.white,
@@ -513,7 +651,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
       children: [
         if (earnings > 0)
           Text(
-            '\$${earnings.toStringAsFixed(0)}',
+            '\$${earnings.toStringAsFixed(2)}',
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
@@ -545,16 +683,23 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
   Widget _buildDeliveryItem(Map<String, dynamic> order) {
     final fuelQuantity = order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? 0;
     final fuelType = order['fuel_type'] ?? 'Fuel';
-    final amount = double.tryParse(order['total_amount']?.toString() ?? '0') ?? 0.0;
+    final rawEarning = order['driver_earning'] ?? order['total_amount'] ?? '0';
+    final amount = double.tryParse(rawEarning.toString()) ?? 0.0;
     
-    // Format actual completion date/time
+    // Format actual completion date/time (with fallback to created_at)
+    final timeField = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
     String dateStr = 'Unknown';
-    if (order['completed_at'] != null) {
+    if (timeField != null) {
       try {
-        final d = DateTime.parse(order['completed_at']).toLocal();
         final now = DateTime.now();
-        final isToday = d.year == now.year && d.month == now.month && d.day == now.day;
-        final isYesterday = d.year == now.year && d.month == now.month && d.day == now.day - 1;
+        var d = DateTime.parse(timeField.toString()).toLocal();
+        if (d.isAfter(now)) {
+          d = now;
+        }
+        final todayDate = DateTime(now.year, now.month, now.day);
+        final orderDate = DateTime(d.year, d.month, d.day);
+        final isToday = orderDate == todayDate;
+        final isYesterday = orderDate == todayDate.subtract(const Duration(days: 1));
 
         final hour = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
         final min = d.minute.toString().padLeft(2, '0');
@@ -664,5 +809,129 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
         ),
       ),
     );
+  }
+
+  void _showCashOutDialog(BuildContext context) {
+    final TextEditingController amountController = TextEditingController();
+    bool isProcessing = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              'Cash Out',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Available: \$${_walletBalance.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: amountController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                  decoration: InputDecoration(
+                    hintText: 'Enter amount',
+                    prefixText: '\$ ',
+                    filled: true,
+                    fillColor: const Color(0xFFFBFBFB),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isProcessing ? null : () => Navigator.pop(context),
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w700)),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: isProcessing ? null : () async {
+                    final amount = double.tryParse(amountController.text) ?? 0.0;
+                    if (amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount')));
+                      return;
+                    }
+                    if (amount > _walletBalance) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Insufficient balance')));
+                      return;
+                    }
+
+                    setDialogState(() => isProcessing = true);
+                    
+                    final result = await WalletService.requestPayout(amount);
+                    
+                    if (!context.mounted) return;
+                    Navigator.pop(context); // Close dialog
+                    
+                    String displayMsg = result['message'];
+                    if (displayMsg.contains('Insufficient balance')) {
+                      displayMsg = 'Stripe Error: Insufficient available funds in your account.';
+                    }
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(displayMsg),
+                        backgroundColor: result['success'] ? Colors.green : Colors.red,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                    if (result['success']) {
+                      _loadData(); // Refresh balance and orders
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF4D00),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isProcessing 
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Confirm', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+
+  Future<void> _startStripeOnboarding() async {
+    final result = await WalletService.getStripeOnboardingUrlWithResult();
+    if (!mounted) return;
+    
+    if (result['url'] != null) {
+      final uri = Uri.parse(result['url']);
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open onboarding link.')));
+      }
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${result['error'] ?? 'Generating onboarding link failed.'}'),
+          backgroundColor: Colors.red,
+        )
+      );
+    }
   }
 }

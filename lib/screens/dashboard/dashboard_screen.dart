@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,7 +14,7 @@ import '../order/order_details_screen.dart';
 import '../profile/settings_screen.dart';
 import '../../services/driver_database_service.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
-import 'dart:math' as math;
+import '../../services/service_area_service.dart';
 
 
 class DashboardScreen extends StatefulWidget {
@@ -38,7 +40,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _profileImageUrl;
 
   // ── Nearby orders (shown on dashboard) ────────────────────────────
-  static const double _nearbyRadiusKm = 25.0;
+  // _serviceAreas is loaded once on init and used for order proximity filtering.
+  // When empty, ServiceAreaService falls back to 25 km driver-relative radius.
+  List<ServiceArea> _serviceAreas = [];
   List<Map<String, dynamic>> _nearbyOrders = [];
   String? _acceptingOrderId;          // order ID currently being accepted
   Position? _driverPosition;
@@ -53,9 +57,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _loadServiceAreas();
     _scheduleFetch();
     _startLocationWatch();
     _subscribeNearbyOrders();
+  }
+
+  /// Fetches active service areas once on screen load.
+  /// A refresh can be triggered by calling this again (e.g., on pull-to-refresh).
+  Future<void> _loadServiceAreas() async {
+    final areas = await ServiceAreaService.fetchActiveAreas();
+    if (mounted) setState(() => _serviceAreas = areas);
   }
 
   @override
@@ -65,17 +77,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _nearbyChannel?.unsubscribe();
     _dashLocationStream?.cancel();
     super.dispose();
-  }
-
-  // ── Haversine ─────────────────────────────────────────────────────
-  double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
-    const r = 6371.0;
-    final dLat = (lat2 - lat1) * math.pi / 180;
-    final dLng = (lng2 - lng1) * math.pi / 180;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1 * math.pi / 180) * math.cos(lat2 * math.pi / 180) *
-        math.sin(dLng / 2) * math.sin(dLng / 2);
-    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   // ── Track driver location for proximity filter ─────────────────────
@@ -101,16 +102,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {}
   }
 
-  // ── Whether an order is within 25 km ─────────────────────────────────────────
-  // Returns TRUE when: no driver position, or no order coordinates, or within radius.
-  // This is conservative — when in doubt, SHOW the order.
+  // ── Whether an order falls within a configured service area ──────────────────
+  // Delegates to ServiceAreaService which handles both the service-area check
+  // and the 25 km fallback when no service areas are configured.
   bool _isNearby(Map<String, dynamic> order) {
-    final pos = _driverPosition;
-    if (pos == null) {
-      debugPrint('[NearbyFilter] No driver position yet — showing order ${order['id']} by default.');
-      return true;
-    }
-
     // Try all known coordinate field names used in this app's DB schema
     final latRaw = order['customer_lat']
         ?? order['delivery_lat']
@@ -123,24 +118,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ?? order['delivery_longitude']
         ?? order['lng'];
 
-    final lat = double.tryParse(latRaw?.toString() ?? '');
-    final lng = double.tryParse(lngRaw?.toString() ?? '');
+    final orderLat = double.tryParse(latRaw?.toString() ?? '');
+    final orderLng = double.tryParse(lngRaw?.toString() ?? '');
 
-    if (lat == null || lng == null || lat == 0.0 || lng == 0.0) {
-      debugPrint('[NearbyFilter] No valid coords for order ${order['id']} — showing by default.');
-      return true; // Show when coords are missing/zero
-    }
-
-    final distance = _haversineKm(pos.latitude, pos.longitude, lat, lng);
-    final isWithin = distance <= _nearbyRadiusKm;
-
-    debugPrint('[NearbyFilter] Order ${order['id']}: '
-        'driver=(${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}) '
-        'order=($lat, $lng) '
-        'dist=${distance.toStringAsFixed(2)}km '
-        '${isWithin ? "SHOW" : "HIDE"} (radius=$_nearbyRadiusKm km)');
-
-    return isWithin;
+    return ServiceAreaService.isOrderInServiceAreas(
+      areas: _serviceAreas,
+      driverLat: _driverPosition?.latitude,
+      driverLng: _driverPosition?.longitude,
+      orderLat: orderLat,
+      orderLng: orderLng,
+      orderId: order['id']?.toString(),
+    );
   }
 
   // ── Realtime subscription for available/pending orders ────────────
@@ -255,8 +243,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Order DB mein mil hi nahi raha
         if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Order no longer available.'),
+          final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l10n.dashboardOrderNoLongerAvailable),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
           ));
@@ -291,8 +280,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (hasRealDriver || (liveStatus != 'available' && liveStatus != 'pending')) {
         if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Sorry, this order was just accepted by another driver.'),
+          final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l10n.dashboardOrderTakenByAnother),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ));
@@ -329,9 +319,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       };
 
       // ── UPDATE: Simple eq-only update (no SQL status/driver_id guards) ──────
-      // Reason: SQL inFilter is case-sensitive ('PENDING' ≠ 'pending') and
-      // 'driver_id IS NULL' misses empty-string driver_ids — both cause false
-      // "accepted by another driver" errors.
       // Race safety is ensured by reading the row AFTER the update and verifying
       // that driver_id is now set to OUR user ID.
       await Supabase.instance.client
@@ -355,8 +342,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Another driver won the race between preflight and update
         if (mounted) setState(() => _nearbyOrders.removeWhere((o) => o['id'] == orderId));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Sorry, this order was just accepted by another driver.'),
+          final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l10n.dashboardOrderTakenByAnother),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ));
@@ -378,7 +366,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _scheduleFetch();
 
       // Fetch full order row to show OrderDetailsScreen
-      // (Driver taps Navigate from there — same flow as assigned_orders_screen)
       Map<String, dynamic>? fullOrder;
       try {
         fullOrder = await Supabase.instance.client
@@ -387,21 +374,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (!mounted) return;
 
-      // Navigate to OrderDetailsScreen first — driver can then tap navigate to start journey
+      final l10n = AppLocalizations.of(context)!;
+      // Navigate to OrderDetailsScreen first
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => OrderDetailsScreen(order: fullOrder ?? {'id': orderId}),
       ));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Order accepted! Tap 'Navigate' to start delivery."),
-        backgroundColor: Color(0xFF4CAF50),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(l10n.dashboardOrderAccepted),
+        backgroundColor: const Color(0xFF4CAF50),
         behavior: SnackBarBehavior.floating,
       ));
 
     } catch (e) {
       debugPrint('[Dashboard] _acceptNearbyOrder error: $e');
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('${l10n.dashboardFailedAction}$e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -481,7 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               .from('orders')
               .select('id')
               .eq('driver_id', user.id)
-              .inFilter('status', ['completed', 'delivered'])
+              .inFilter('status', ['completed', 'delivered', 'COMPLETED', 'DELIVERED'])
               .gte('completed_at', startOfDay);
 
           if (myToken != _fetchToken || !mounted) return;
@@ -604,10 +593,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         setState(() => _activeOrder = null);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Emergency alert sent! Order moved to Emergency queue.'),
+          SnackBar(
+            content: Text(l10n.dashboardEmergencyAlert),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -616,8 +606,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _scheduleFetch();
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to trigger emergency: $e')),
+          SnackBar(content: Text('${l10n.dashboardFailedEmergency}$e')),
         );
       }
     }
@@ -638,9 +629,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _scheduleFetch();
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         setState(() => _isOnline = !value); // Revert optimistic update
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update status. Please check your connection.')),
+          SnackBar(content: Text(l10n.dashboardFailedUpdateStatus)),
         );
       }
     }
@@ -652,8 +644,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await launchUrl(callUri);
     } else {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch phone dialer')),
+          SnackBar(content: Text(l10n.dashboardCannotDialer)),
         );
       }
     }
@@ -661,6 +654,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFFFBFBFB),
       body: SafeArea(
@@ -776,9 +770,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           Expanded(
                             child: _buildStatCard(
-                              'Delivers',
-                              _isOnline ? 'Active' : 'Offline',
-                              _isOnline ? 'Receiving Orders' : 'Go Online',
+                              l10n.dashboardDelivers,
+                              _isOnline ? l10n.dashboardActive : l10n.dashboardOffline,
+                              _isOnline ? l10n.dashboardReceivingOrders : l10n.dashboardGoOnline,
                               Icons.directions_car,
                               _isOnline ? 1.0 : 0.0,
                             ),
@@ -787,16 +781,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Expanded(
                             child: _isFuelLoading 
                               ? _buildStatCard(
-                                  'Fuel Capacity',
+                                  l10n.dashboardFuelCapacity,
                                   '--', // Loading placeholder
-                                  'Loading...',
+                                  l10n.dashboardLoading,
                                   Icons.local_gas_station,
                                   0.0,
                                 )
                               : _buildStatCard(
-                                  'Fuel Capacity',
+                                  l10n.dashboardFuelCapacity,
                                   _currentFuel > 0 ? '${_currentFuel.toStringAsFixed(0)} Gal' : '0 Gal',
-                                  _currentFuel > 0 ? '${((_currentFuel / _maxFuelCapacity) * 100).toStringAsFixed(0)}%' : 'Empty',
+                                  _currentFuel > 0 ? '${((_currentFuel / _maxFuelCapacity) * 100).toStringAsFixed(0)}%' : l10n.dashboardEmpty,
                                   Icons.local_gas_station,
                                   (_currentFuel / _maxFuelCapacity).clamp(0.0, 1.0),
                                 ),
@@ -808,7 +802,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       // Show order section ONLY when online
                       if (_isOnline) ...[
                         Text(
-                          _activeOrder != null ? 'Active Delivery' : 'Available Status',
+                          _activeOrder != null ? l10n.dashboardActiveDelivery : l10n.dashboardAvailableStatus,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -824,9 +818,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _buildSearchingOrderCard(),
                       ] else ...[
                         // Offline message
-                        const Text(
-                          'Status',
-                          style: TextStyle(
+                        Text(
+                          l10n.dashboardAvailableStatus,
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF666666),
@@ -843,14 +837,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              title: const Text('Emergency Alert'),
-                              content: const Text(
-                                'Are you sure you want to trigger an emergency alert? This will notify dispatch immediately.',
-                              ),
+                              title: Text(l10n.dashboardEmergencyTitle),
+                              content: Text(l10n.dashboardEmergencyPrompt),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: const Text('Cancel'),
+                                  child: Text(l10n.common_cancel),
                                 ),
                                 ElevatedButton(
                                   onPressed: () {
@@ -860,7 +852,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.redAccent,
                                   ),
-                                  child: const Text('Send Alert', style: TextStyle(color: Colors.white)),
+                                  child: Text(l10n.dashboardEmergencyConfirm, style: const TextStyle(color: Colors.white)),
                                 ),
                               ],
                             ),
@@ -877,19 +869,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
+                                  children: [
                                     Text(
-                                      'Emergency Alert',
-                                      style: TextStyle(
+                                      l10n.dashboardEmergencyTitle,
+                                      style: const TextStyle(
                                         fontSize: 17,
                                         fontWeight: FontWeight.w800,
                                         color: Color(0xFF1F1F1F),
                                       ),
                                     ),
-                                    SizedBox(height: 6),
+                                    const SizedBox(height: 6),
                                     Text(
-                                      'Tap and hold in case of fuel spill,\nfire, or accident.',
-                                      style: TextStyle(
+                                      l10n.dashboardEmergencySubtitle,
+                                      style: const TextStyle(
                                         fontSize: 13,
                                         color: Color(0xFFFF4D4D),
                                         height: 1.4,
@@ -926,6 +918,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildActiveOrderCard() {
+    final l10n = AppLocalizations.of(context)!;
     // Try multiple field names — different parts of the app store phone differently
     final customerPhone = [
       _activeOrder!['customer_phone'],
@@ -956,7 +949,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Scheduled order. You can start this delivery 1 hour before the scheduled time (Scheduled for: $scheduledLabel).',
+            l10n.dashboardScheduledWarning(scheduledLabel),
           ),
           backgroundColor: const Color(0xFFFF8C00),
           behavior: SnackBarBehavior.floating,
@@ -1006,13 +999,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'STATUS • ${_activeOrder!['status']?.toString().toUpperCase() ?? 'UNKNOWN'}',
+                      'STATUS • ${l10n.dashboardStatusAssigned}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                         color: Color(0xFFFF4D00),
                         letterSpacing: 0.5,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -1022,6 +1017,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         fontWeight: FontWeight.w800,
                         color: Color(0xFF1F1F1F),
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -1031,6 +1028,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: Color(0xFF888888),
                         fontWeight: FontWeight.w500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                       if (deliveryLat != null && deliveryLng != null)
                         FutureBuilder<Position>(
@@ -1044,8 +1043,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 deliveryLng,
                               );
                               final distText = distMeters > 0
-                                  ? '${(distMeters / 1609.34).toStringAsFixed(1)} miles away'
-                                  : '0.0 miles away';
+                                  ? l10n.dashboardMilesAway((distMeters / 1609.34).toStringAsFixed(1))
+                                  : l10n.dashboardMilesAway('0.0');
                               return Container(
                                 margin: const EdgeInsets.only(top: 4),
                                 child: Text(
@@ -1087,7 +1086,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     size: 20,
                     color: isTimeLocked ? Colors.grey : Colors.white,
                   ),
-                  label: const Text('Navigate'),
+                  label: Text(l10n.dashboardNavigate),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isTimeLocked
                         ? const Color(0xFFDDDDDD)
@@ -1128,8 +1127,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             }
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Customer phone number not available.'),
+                                SnackBar(
+                                  content: Text(l10n.dashboardNoPhone),
                                   backgroundColor: Colors.orangeAccent,
                                 ),
                               );
@@ -1141,7 +1140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     size: 20,
                     color: isTimeLocked ? Colors.grey : Colors.white,
                   ),
-                  label: const Text('Contact'),
+                  label: Text(l10n.dashboardContact),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isTimeLocked
                         ? const Color(0xFFDDDDDD)
@@ -1176,16 +1175,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               mode: LaunchMode.externalApplication);
                         } else {
                           messenger.showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                                 content:
-                                    Text('Could not open Google Maps.')),
+                                    Text(l10n.dashboardOpenMapsError)),
                           );
                         }
                       } else {
                         messenger.showSnackBar(
-                          const SnackBar(
+                          SnackBar(
                               content: Text(
-                                  'No GPS coordinates for this order yet.')),
+                                  l10n.dashboardNoGps)),
                         );
                       }
                     },
@@ -1197,7 +1196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 size: 18,
               ),
               label: Text(
-                'Open in Google Maps',
+                l10n.dashboardOpenMaps,
                 style: TextStyle(
                     color: isTimeLocked
                         ? Colors.grey
@@ -1220,6 +1219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSearchingOrderCard() {
+    final l10n = AppLocalizations.of(context)!;
     if (_nearbyOrders.isEmpty) {
       // No nearby orders yet — show radar pulse
       return Container(
@@ -1234,15 +1234,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Icon(Icons.radar, size: 48, color: Color(0xFFFF4D00)),
             const SizedBox(height: 16),
-            const Text(
-              'Searching for nearby orders...',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F)),
+            Text(
+              l10n.dashboardSearchingNearby,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1F1F1F)),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'New orders within 25 km will appear here automatically.',
+            Text(
+              l10n.dashboardSearchingNearbyDesc,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Color(0xFF888888)),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF888888)),
             ),
             const SizedBox(height: 20),
             SizedBox(
@@ -1252,8 +1252,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   MaterialPageRoute(builder: (_) => const AssignedOrdersScreen()),
                 ),
                 icon: const Icon(Icons.list_alt_rounded, size: 18, color: Color(0xFFFF4D00)),
-                label: const Text('View All Orders',
-                    style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFFF4D00))),
+                label: Text(l10n.dashboardViewAllOrders,
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFFF4D00))),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Color(0xFFFF4D00)),
                   padding: const EdgeInsets.symmetric(vertical: 13),
@@ -1275,7 +1275,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Icon(Icons.location_on, color: Color(0xFFFF4D00), size: 16),
             const SizedBox(width: 6),
             Text(
-              '${_nearbyOrders.length} order${_nearbyOrders.length == 1 ? '' : 's'} within 25 km',
+              l10n.dashboardOrdersCount(_nearbyOrders.length),
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFFF4D00)),
             ),
             const Spacer(),
@@ -1283,7 +1283,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const AssignedOrdersScreen()),
               ),
-              child: const Text('View All', style: TextStyle(fontSize: 12, color: Color(0xFF888888))),
+              child: Text(l10n.dashboardViewAllText, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
             ),
           ],
         ),
@@ -1293,7 +1293,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  double _haversineKm(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371.0;
+    final dLat = (lat2 - lat1) * 3.1415926535897932 / 180;
+    final dLng = (lng2 - lng1) * 3.1415926535897932 / 180;
+    final a = (math.sin(dLat / 2) * math.sin(dLat / 2)) +
+        (math.cos(lat1 * 3.1415926535897932 / 180) *
+            math.cos(lat2 * 3.1415926535897932 / 180) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2));
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
   Widget _buildNearbyOrderCard(Map<String, dynamic> order) {
+    final l10n = AppLocalizations.of(context)!;
     final orderId = order['id']?.toString() ?? '';
     final shortId = '#ORD-${orderId.length >= 4 ? orderId.substring(0, 4).toUpperCase() : orderId.toUpperCase()}';
     final address = order['delivery_address']?.toString() ?? 'Unknown Location';
@@ -1308,7 +1321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final lng = double.tryParse(order['longitude']?.toString() ?? '');
       if (lat != null && lng != null) {
         final km = _haversineKm(pos.latitude, pos.longitude, lat, lng);
-        distLabel = km < 1 ? '${(km * 1000).round()} m away' : '${km.toStringAsFixed(1)} km away';
+        distLabel = km < 1 ? l10n.dashboardMetersAway((km * 1000).round()) : l10n.dashboardKmAway(km.toStringAsFixed(1));
       }
     }
 
@@ -1336,23 +1349,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(6)),
-                      child: const Text('AVAILABLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF2E7D32))),
+                      child: Text(l10n.dashboardStatusAvailable, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Color(0xFF2E7D32))),
                     ),
                     const Spacer(),
                     if (distLabel.isNotEmpty)
-                      Text(distLabel, style: const TextStyle(fontSize: 11, color: Color(0xFF888888), fontWeight: FontWeight.w600)),
+                      Flexible(
+                        child: Text(
+                          distLabel,
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF888888), fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(address,
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1F1F1F)),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     const Icon(Icons.local_gas_station, size: 13, color: Color(0xFF888888)),
                     const SizedBox(width: 4),
-                    Text(fuelType, style: const TextStyle(fontSize: 12, color: Color(0xFF888888), fontWeight: FontWeight.w500)),
+                    Flexible(
+                      child: Text(
+                        fuelType,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF888888), fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -1371,21 +1398,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     child: isAccepting
-                        ? const Row(
+                        ? Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              SizedBox(width: 16, height: 16,
+                              const SizedBox(width: 16, height: 16,
                                   child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-                              SizedBox(width: 10),
-                              Text('Accepting…', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              const SizedBox(width: 10),
+                              Text(l10n.dashboardAccepting, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                             ],
                           )
-                        : const Row(
+                        : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.check_circle_outline_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Accept Order', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                              const Icon(Icons.check_circle_outline_rounded, size: 18),
+                              const SizedBox(width: 8),
+                              Text(l10n.dashboardAcceptOrder, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                             ],
                           ),
                   ),
@@ -1399,6 +1426,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildOfflineCard() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -1415,19 +1443,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: Colors.grey.shade400,
           ),
           const SizedBox(height: 16),
-          const Text(
-            'You are currently offline',
-            style: TextStyle(
+          Text(
+            l10n.dashboardOfflineCardTitle,
+            style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
               color: Color(0xFF1F1F1F),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Toggle your status top-right to start receiving deliveries.',
+          Text(
+            l10n.dashboardOfflineCardDesc,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 13,
               color: Color(0xFF888888),
             ),
@@ -1456,15 +1484,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: const Color(0xFFFF4D00), size: 22),
               if (subtitle.isNotEmpty)
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF888888),
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF888888),
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
                   ),
                 ),
             ],

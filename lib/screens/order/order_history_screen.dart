@@ -31,7 +31,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         .from('orders')
         .select()
         .eq('driver_id', user.id)
-        .inFilter('status', ['completed', 'delivered'])
+        .inFilter('status', ['completed', 'delivered', 'COMPLETED', 'DELIVERED'])
         .order('created_at', ascending: false);
   }
 
@@ -159,9 +159,14 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                   itemBuilder: (context, index) {
                     final order = allHistory[index];
                     
-                    final completedAt = order['completed_at'] != null 
-                        ? DateTime.parse(order['completed_at'].toString()).toLocal()
-                        : DateTime.now();
+                    final rawTime = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
+                    final now = DateTime.now();
+                    var completedAt = rawTime != null 
+                        ? DateTime.parse(rawTime.toString()).toLocal()
+                        : now;
+                    if (completedAt.isAfter(now)) {
+                      completedAt = now;
+                    }
                     
                     return _buildOrderCard(
                       date: '${_getMonthName(completedAt.month)} ${completedAt.day}, ${completedAt.year} • ${_formatTime(completedAt)}',

@@ -1,0 +1,3 @@
+Open Questions for UI/Schema:
+1. Do you have any specific Row Level Security (RLS) requirements, or should I implement standard 'own-data-only' access?
+2. Are there any other tables I might have missed (e.g., notifications, payouts)?

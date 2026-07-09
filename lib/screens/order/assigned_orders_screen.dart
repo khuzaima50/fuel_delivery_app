@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../../services/notification_service.dart';
 import '../../services/driver_database_service.dart';
+import '../../services/service_area_service.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'order_details_screen.dart';
 
@@ -34,7 +35,8 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   RealtimeChannel? _ordersChannel;
 
   // ── Driver location (for proximity filtering) ──────────────────────
-  static const double _nearbyRadiusKm = 25.0; // show orders within 25 km
+  // _serviceAreas is loaded once on init; falls back to 25 km driver-relative radius when empty.
+  List<ServiceArea> _serviceAreas = [];
   Position? _driverPosition;
   StreamSubscription<Position>? _locationFilterStream;
 
@@ -48,10 +50,17 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   @override
   void initState() {
     super.initState();
+    _loadServiceAreas();
     _listenToDriverStatus();
     _fetchOrders();
     _subscribeToOrderChanges();
     _startLocationFilter();
+  }
+
+  /// Loads active global service areas from Supabase.
+  Future<void> _loadServiceAreas() async {
+    final areas = await ServiceAreaService.fetchActiveAreas();
+    if (mounted) setState(() => _serviceAreas = areas);
   }
 
   @override
@@ -97,7 +106,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     }
   }
 
-  // ── Haversine distance (km) between two lat/lng points ────────────
+  // ── Haversine distance (km) — kept for the distance label on order cards ──
   double _distanceKm(double lat1, double lng1, double lat2, double lng2) {
     const r = 6371.0; // Earth radius in km
     final dLat = _toRad(lat2 - lat1);
@@ -117,8 +126,8 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   String? _orderDistanceLabel(Map<String, dynamic> order) {
     final dPos = _driverPosition;
     if (dPos == null) return null;
-    final lat = double.tryParse(order['latitude']?.toString() ?? '');
-    final lng = double.tryParse(order['longitude']?.toString() ?? '');
+    final lat = double.tryParse((order['delivery_lat'] ?? order['latitude'] ?? order['customer_lat'])?.toString() ?? '');
+    final lng = double.tryParse((order['delivery_lng'] ?? order['longitude'] ?? order['customer_lng'])?.toString() ?? '');
     if (lat == null || lng == null) return null;
     final km = _distanceKm(dPos.latitude, dPos.longitude, lat, lng);
     return km < 1 ? '${(km * 1000).round()} m away' : '${km.toStringAsFixed(1)} km away';
@@ -307,18 +316,24 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       }
 
       // ── Conditional DB update (race-safe) ─────────────────────────────────
-      // Only succeeds if status is still pending/available AND driver_id is null.
-      // If another driver accepted a millisecond earlier, returns 0 rows.
-      final List<dynamic> updated = await Supabase.instance.client
+      // Reason: SQL inFilter is case-sensitive and driver_id IS NULL fails on empty strings.
+      // We perform a direct update and then verify if we won the race.
+      await Supabase.instance.client
           .from('orders')
           .update(updatePayload)
+          .eq('id', orderId);
+
+      // Verify update won the race — read back current row
+      final verifyRow = await Supabase.instance.client
+          .from('orders')
+          .select('id, driver_id')
           .eq('id', orderId)
-          .inFilter('status', ['available', 'pending', 'PENDING'])
-          .filter('driver_id', 'is', null)
-          .select('id'); // returns the updated rows (empty list = race lost)
+          .maybeSingle();
+
+      final actualDriverId = verifyRow?['driver_id']?.toString() ?? '';
 
       // ── Race condition detected ────────────────────────────────────────────
-      if (updated.isEmpty) {
+      if (actualDriverId != user.id) {
         debugPrint('[Orders] Race condition: order $orderId was accepted by another driver');
         // Refresh from DB to get the real current state
         await _fetchOrders();
@@ -418,9 +433,8 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
 
       if (!mounted) return;
 
-      // Accept ho gaya — Assigned tab par switch karo
-      // Driver khud card tap karke details mein jayega aur wahan se navigate karega
-      setState(() => _activeFilterIndex = 1);
+      // Accept ho gaya — switch to the appropriate tab
+      setState(() => _activeFilterIndex = targetTab);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -644,14 +658,19 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
 
       if (_activeFilterIndex == 0) {
         if (!isAvailableStatus()) return false;
-        // ── Proximity filter ────────────────────────────────────────
-        final dPos = _driverPosition;
-        if (dPos == null) return true; // no location yet → show all
-        final lat = double.tryParse(o['latitude']?.toString() ?? '');
-        final lng = double.tryParse(o['longitude']?.toString() ?? '');
-        if (lat == null || lng == null) return true; // no coords → show
-        final km = _distanceKm(dPos.latitude, dPos.longitude, lat, lng);
-        return km <= _nearbyRadiusKm;
+        // ── Service-area proximity filter ──────────────────────────────────
+        final lat = double.tryParse(
+            (o['delivery_lat'] ?? o['latitude'] ?? o['customer_lat'])?.toString() ?? '');
+        final lng = double.tryParse(
+            (o['delivery_lng'] ?? o['longitude'] ?? o['customer_lng'])?.toString() ?? '');
+        return ServiceAreaService.isOrderInServiceAreas(
+          areas: _serviceAreas,
+          driverLat: _driverPosition?.latitude,
+          driverLng: _driverPosition?.longitude,
+          orderLat: lat,
+          orderLng: lng,
+          orderId: o['id']?.toString(),
+        );
       }
       
       if (_activeFilterIndex == 1) {
@@ -756,7 +775,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                 Text(
                   _driverPosition == null
                       ? 'Waiting for GPS location…'
-                      : 'Showing orders within ${_nearbyRadiusKm.round()} km of your location.',
+                      : _serviceAreas.isEmpty
+                          ? 'Showing orders within 25 km of your location (fallback).'
+                          : 'Showing orders within ${_serviceAreas.length} configured service area(s).',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                 ),

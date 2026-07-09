@@ -1,14 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'vehicle_info_screen.dart';
 
-/// Step 2 of registration: Driver reviews their name & phone (pre-filled from
-/// sign-up) and optionally adds a profile photo.
-/// Saves avatar + marks is_profile_completed = true, then goes to VehicleInfoScreen.
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
 
@@ -39,8 +37,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     super.dispose();
   }
 
-  // ── Pre-fill name & phone from drivers table ──────────────────────────────
-
   Future<void> _prefillFromDB() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -66,9 +62,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  // ── Image Picker ──────────────────────────────────────────────────────────
-
   Future<void> _pickProfileImage() async {
+    final l10n = AppLocalizations.of(context)!;
     final picker = ImagePicker();
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -89,9 +84,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Choose Photo',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            Text(
+              l10n.profileSetupChoosePhoto,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
             ListTile(
@@ -99,7 +94,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 backgroundColor: Color(0xFFFFEDE6),
                 child: Icon(Icons.camera_alt_outlined, color: Color(0xFFFF4D00)),
               ),
-              title: const Text('Take a photo'),
+              title: Text(l10n.profileSetupTakePhoto),
               onTap: () => Navigator.pop(ctx, ImageSource.camera),
             ),
             ListTile(
@@ -107,7 +102,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 backgroundColor: Color(0xFFFFEDE6),
                 child: Icon(Icons.photo_library_outlined, color: Color(0xFFFF4D00)),
               ),
-              title: const Text('Choose from gallery'),
+              title: Text(l10n.profileSetupChooseGallery),
               onTap: () => Navigator.pop(ctx, ImageSource.gallery),
             ),
             const SizedBox(height: 12),
@@ -132,7 +127,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not select photo: $e'),
+            content: Text('${l10n.profileSetupPhotoError}$e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -140,11 +135,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
 
     try {
@@ -153,7 +146,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
       String? avatarUrl = _existingAvatarUrl;
 
-      // 1. Upload profile photo if a new one was selected
       if (_profileImageFile != null) {
         final ext = _profileImageFile!.path.split('.').last.toLowerCase();
         final filePath = 'avatars/${user.id}/profile.$ext';
@@ -169,11 +161,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         avatarUrl = Supabase.instance.client.storage
             .from('driver_documents')
             .getPublicUrl(filePath);
-
-        debugPrint('[Profile] Avatar uploaded → $avatarUrl');
       }
 
-      // 2. Update drivers table (row already exists from sign-up/login)
       final updateData = <String, dynamic>{
         'full_name':            _nameController.text.trim(),
         'phone':                _phoneController.text.trim(),
@@ -183,30 +172,21 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       };
       if (avatarUrl != null) updateData['avatar_url'] = avatarUrl;
 
-      try {
-        await Supabase.instance.client
-            .from('drivers')
-            .update(updateData)
-            .eq('id', user.id);
-        debugPrint('[Profile] Driver profile updated ✓');
-      } catch (updateErr) {
-        // Surface the exact Supabase error for debugging
-        debugPrint('[Profile] Update failed: $updateErr');
-        rethrow;
-      }
+      await Supabase.instance.client
+          .from('drivers')
+          .update(updateData)
+          .eq('id', user.id);
 
-      // 3. Navigate to Vehicle Info screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const VehicleInfoScreen()),
         );
       }
     } catch (e) {
-      debugPrint('[Profile] Submit error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save profile: $e'),
+            content: Text('${l10n.profileSetupSaveError}$e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -216,10 +196,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
       body: SafeArea(
@@ -234,19 +213,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     children: [
                       const SizedBox(height: 40),
 
-                      // Header
-                      const Text(
-                        'Complete Your Profile',
-                        style: TextStyle(
+                      Text(
+                        l10n.profileSetupTitle,
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
                           color: Color(0xFF1F1F1F),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      const Text(
-                        'Review your details and add a profile photo so customers can identify you.',
-                        style: TextStyle(
+                      Text(
+                        l10n.profileSetupDesc,
+                        style: const TextStyle(
                           fontSize: 15,
                           color: Color(0xFF666666),
                           height: 1.4,
@@ -255,7 +233,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
                       const SizedBox(height: 36),
 
-                      // Profile Image Picker
                       Center(
                         child: GestureDetector(
                           onTap: _isLoading ? null : _pickProfileImage,
@@ -301,62 +278,51 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Center(
+                      Center(
                         child: Text(
-                          'Tap to add / change profile photo',
-                          style: TextStyle(fontSize: 13, color: Color(0xFF888888)),
+                          l10n.profileSetupTapToAdd,
+                          style: const TextStyle(fontSize: 13, color: Color(0xFF888888)),
                         ),
                       ),
 
                       const SizedBox(height: 32),
 
-                      // Full Name (pre-filled from signup)
-                      _buildLabel('Full Name'),
+                      _buildLabel(l10n.profileSetupFullName),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _nameController,
                         textCapitalization: TextCapitalization.words,
                         decoration: _inputDecoration(
-                          hint: 'e.g. Ahmed Khan',
+                          hint: l10n.profileSetupFullNameHint,
                           icon: Icons.person_outlined,
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Please enter your full name';
-                          }
-                          if (v.trim().length < 3) {
-                            return 'Name must be at least 3 characters';
-                          }
+                          if (v == null || v.trim().isEmpty) return l10n.profileSetupNameRequired;
+                          if (v.trim().length < 3) return l10n.profileSetupNameTooShort;
                           return null;
                         },
                       ),
 
                       const SizedBox(height: 20),
 
-                      // Phone (pre-filled from signup)
-                      _buildLabel('Phone Number'),
+                      _buildLabel(l10n.profileSetupPhoneNumber),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
                         decoration: _inputDecoration(
-                          hint: '+92 300 0000000',
+                          hint: l10n.profileSetupPhoneHint,
                           icon: Icons.phone_outlined,
                         ),
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Please enter your phone number';
-                          }
-                          if (v.trim().length < 7) {
-                            return 'Enter a valid phone number';
-                          }
+                          if (v == null || v.trim().isEmpty) return l10n.profileSetupPhoneRequired;
+                          if (v.trim().length < 7) return l10n.profileSetupPhoneInvalid;
                           return null;
                         },
                       ),
 
                       const SizedBox(height: 48),
 
-                      // Submit
                       SizedBox(
                         width: double.infinity,
                         height: 58,
@@ -381,9 +347,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     strokeWidth: 2.5,
                                   ),
                                 )
-                              : const Text(
-                                  'Save & Continue',
-                                  style: TextStyle(
+                              : Text(
+                                  l10n.profileSetupSaveContinue,
+                                  style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
                                   ),

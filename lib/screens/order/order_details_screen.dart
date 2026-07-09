@@ -53,11 +53,33 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   Future<void> _initActiveOrderTracking() async {
     try {
-      final position = await Geolocator.getCurrentPosition();
-      _fetchRoute(position);
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 8),
+          ),
+        );
+      } catch (e) {
+        debugPrint('Error getting current position, trying last known: $e');
+        position = await Geolocator.getLastKnownPosition();
+      }
+      
+      if (position != null) {
+        _fetchRoute(position);
+      } else {
+        debugPrint('Could not get any position for route.');
+      }
     } catch (e) {
       debugPrint('Error getting position for route: $e');
     }
+  }
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
   }
 
   List<LatLng> _decodePolyline(String encoded) {
@@ -89,10 +111,46 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Future<void> _fetchRoute(Position driverPos) async {
-    final double? dLat = double.tryParse(
-        (widget.order['customer_lat'] ?? widget.order['delivery_lat'])?.toString() ?? '');
-    final double? dLng = double.tryParse(
-        (widget.order['customer_lng'] ?? widget.order['delivery_lng'])?.toString() ?? '');
+    double? dLat = double.tryParse(
+        (widget.order['customer_lat'] ?? widget.order['delivery_lat'] ?? widget.order['latitude'] ?? widget.order['delivery_latitude'] ?? widget.order['lat'])?.toString() ?? '');
+    double? dLng = double.tryParse(
+        (widget.order['customer_lng'] ?? widget.order['delivery_lng'] ?? widget.order['longitude'] ?? widget.order['delivery_longitude'] ?? widget.order['lng'])?.toString() ?? '');
+
+    if (dLat == 0.0 && dLng == 0.0) {
+      dLat = null;
+      dLng = null;
+    }
+
+    if ((dLat == null || dLng == null) && _apiKey.isNotEmpty) {
+      final address = widget.order['delivery_address']?.toString() ?? '';
+      if (address.isNotEmpty) {
+        debugPrint('[OrderDetails] No lat/lng in DB — attempting Geocoding for: "$address"');
+        try {
+          final uri = Uri.parse(
+            'https://maps.googleapis.com/maps/api/geocode/json'
+            '?address=${Uri.encodeComponent(address)}&key=$_apiKey',
+          );
+          final resp = await http.get(uri).timeout(const Duration(seconds: 10));
+          if (resp.statusCode == 200) {
+            final data = jsonDecode(resp.body);
+            final results = data['results'] as List?;
+            if (results != null && results.isNotEmpty) {
+              final loc = results.first['geometry']['location'];
+              dLat = (loc['lat'] as num).toDouble();
+              dLng = (loc['lng'] as num).toDouble();
+              
+              // Update the order object so the map widget can use it too
+              widget.order['latitude'] = dLat;
+              widget.order['longitude'] = dLng;
+              
+              if (mounted) setState(() {});
+            }
+          }
+        } catch (e) {
+          debugPrint('[OrderDetails] Geocoding failed: $e');
+        }
+      }
+    }
 
     if (dLat == null || dLng == null || _apiKey.isEmpty) return;
     if (_isLoadingRoute) return;
@@ -111,13 +169,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       final response = await http.get(uri);
       if (!mounted) return;
 
-      final data = jsonDecode(response.body);
-      if (data['status'] == 'OK') {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final status = data['status'] as String? ?? 'UNKNOWN';
+      if (status == 'OK') {
         final routes = data['routes'] as List;
         if (routes.isNotEmpty) {
           final points = routes[0]['overview_polyline']['points'];
           final decoded = _decodePolyline(points);
-          
+          final nonNullDLat = dLat;
+          final nonNullDLng = dLng;
+
           setState(() {
             _polylines.add(Polyline(
               polylineId: const PolylineId('route'),
@@ -134,7 +195,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
             
             _markers.add(Marker(
               markerId: const MarkerId('destination'),
-              position: LatLng(dLat, dLng),
+              position: LatLng(nonNullDLat, nonNullDLng),
               icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
             ));
             
@@ -145,17 +206,25 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           if (_mapController != null) {
             final bounds = LatLngBounds(
               southwest: LatLng(
-                driverPos.latitude < dLat ? driverPos.latitude : dLat,
-                driverPos.longitude < dLng ? driverPos.longitude : dLng,
+                driverPos.latitude < nonNullDLat ? driverPos.latitude : nonNullDLat,
+                driverPos.longitude < nonNullDLng ? driverPos.longitude : nonNullDLng,
               ),
               northeast: LatLng(
-                driverPos.latitude > dLat ? driverPos.latitude : dLat,
-                driverPos.longitude > dLng ? driverPos.longitude : dLng,
+                driverPos.latitude > nonNullDLat ? driverPos.latitude : nonNullDLat,
+                driverPos.longitude > nonNullDLng ? driverPos.longitude : nonNullDLng,
               ),
             );
-            _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+            try {
+              _mapController!.moveCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+            } catch (e) {
+              debugPrint('Error moving camera bounds: $e');
+            }
           }
         }
+      } else {
+        final errMsg = data['error_message'] as String? ?? 'no details';
+        debugPrint('[Route ERROR] Details API status=$status — $errMsg');
+        if (mounted) setState(() => _isLoadingRoute = false);
       }
     } catch (e) {
       debugPrint('Error fetching route in details: $e');
@@ -725,18 +794,21 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                               GoogleMap(
                                 initialCameraPosition: CameraPosition(
                                   target: LatLng(
-                                    double.tryParse((order['customer_lat'] ?? order['delivery_lat'] ?? 0).toString()) ?? 0,
-                                    double.tryParse((order['customer_lng'] ?? order['delivery_lng'] ?? 0).toString()) ?? 0,
+                                    double.tryParse((order['customer_lat'] ?? order['delivery_lat'] ?? order['latitude'] ?? order['delivery_latitude'] ?? order['lat'] ?? 0).toString()) ?? 0,
+                                    double.tryParse((order['customer_lng'] ?? order['delivery_lng'] ?? order['longitude'] ?? order['delivery_longitude'] ?? order['lng'] ?? 0).toString()) ?? 0,
                                   ),
                                   zoom: 14,
                                 ),
-                                onMapCreated: (c) => _mapController = c,
+                                onMapCreated: (c) {
+                                  _mapController = c;
+                                },
                                 markers: _markers,
                                 polylines: _polylines,
-                                myLocationEnabled: true,
+                                myLocationEnabled: false,
                                 myLocationButtonEnabled: false,
                                 zoomControlsEnabled: false,
                                 mapToolbarEnabled: false,
+                                liteModeEnabled: false, // Lite mode disabled — required for polylines to render
                               ),
                               if (_isLoadingRoute)
                                 const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D00))),
@@ -767,9 +839,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                   onTap: () async {
                                     // Extract real customer coordinates
                                     double? lat = double.tryParse(
-                                        (order['customer_lat'] ?? order['delivery_lat'])?.toString() ?? '');
+                                        (order['customer_lat'] ?? order['delivery_lat'] ?? order['latitude'] ?? order['delivery_latitude'] ?? order['lat'])?.toString() ?? '');
                                     double? lng = double.tryParse(
-                                        (order['customer_lng'] ?? order['delivery_lng'])?.toString() ?? '');
+                                        (order['customer_lng'] ?? order['delivery_lng'] ?? order['longitude'] ?? order['delivery_longitude'] ?? order['lng'])?.toString() ?? '');
                                     if (lat == 0.0) lat = null;
                                     if (lng == 0.0) lng = null;
 

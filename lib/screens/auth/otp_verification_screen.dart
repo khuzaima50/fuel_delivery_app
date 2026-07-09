@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import '../../services/otp_service.dart';
@@ -11,8 +12,8 @@ class OtpVerificationScreen extends StatefulWidget {
   final bool isRecovery;
 
   const OtpVerificationScreen({
-    super.key, 
-    required this.email, 
+    super.key,
+    required this.email,
     required this.nextScreen,
     this.isRecovery = false,
   });
@@ -50,7 +51,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _resendTimer = 60;
       _canResend = false;
     });
-    
     _runTimer();
   }
 
@@ -68,24 +68,25 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Future<void> _verifyOtp() async {
+    final l10n = AppLocalizations.of(context)!;
     String otp = _controllers.map((e) => e.text).join();
     if (otp.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter the full 6-digit code")),
+        SnackBar(content: Text(l10n.otpEnterFull)),
       );
       return;
     }
 
     setState(() => _isLoading = true);
-    
+
     bool success = false;
-    
+
     if (widget.isRecovery) {
       try {
         final res = await Supabase.instance.client.auth.verifyOTP(
           email: widget.email,
           token: otp,
-          type: OtpType.magiclink, // Use magiclink because we used signInWithOtp
+          type: OtpType.magiclink,
         );
         success = res.session != null;
       } catch (e) {
@@ -95,23 +96,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } else {
       success = await OtpService.verifyOtp(widget.email, otp);
     }
-    
+
     setState(() => _isLoading = false);
 
     if (success) {
       if (mounted) {
         if (!widget.isRecovery) {
-          // Sync notification token now that user is logged in
           unawaited(NotificationService.syncToken());
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Verification Successful!"),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.otpVerificationSuccessful),
             backgroundColor: Colors.green,
           ),
         );
-        
+
         if (widget.isRecovery) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => widget.nextScreen),
@@ -126,8 +126,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Invalid or expired OTP. Please try again."),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.otpInvalidExpired),
             backgroundColor: Colors.red,
           ),
         );
@@ -137,9 +137,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   Future<void> _resendOtp() async {
     if (!_canResend) return;
-
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
-    
+
     bool sent = false;
     if (widget.isRecovery) {
       try {
@@ -155,20 +155,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } else {
       sent = await OtpService.sendOtp(widget.email);
     }
-    
+
     setState(() => _isLoading = false);
 
     if (sent) {
       _startResendTimer();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("A new OTP has been sent to your email")),
+          SnackBar(content: Text(l10n.otpNewSent)),
         );
       }
     } else {
-       if (mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to resend OTP. Please try again later.")),
+          SnackBar(content: Text(l10n.otpResendFailed)),
         );
       }
     }
@@ -176,6 +176,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -194,9 +195,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                const Text(
-                  'Verify Email',
-                  style: TextStyle(
+                Text(
+                  l10n.otpVerifyEmail,
+                  style: const TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -208,7 +209,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   text: TextSpan(
                     style: const TextStyle(fontSize: 16, color: Color(0xFF666666), height: 1.5),
                     children: [
-                      const TextSpan(text: 'We have sent a 6-digit code to\n'),
+                      TextSpan(text: l10n.otpCodeSentTo),
                       TextSpan(
                         text: widget.email,
                         style: const TextStyle(
@@ -240,9 +241,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'Verify Code',
-                            style: TextStyle(
+                        : Text(
+                            l10n.otpVerifyButton,
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),
@@ -254,9 +255,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   child: Column(
                     children: [
                       Text(
-                        _canResend 
-                          ? "Didn't receive the code?" 
-                          : "Resend code in ${_resendTimer}s",
+                        _canResend
+                            ? l10n.otpDidntReceive
+                            : l10n.otpResendIn(_resendTimer),
                         style: const TextStyle(
                           color: Color(0xFF666666),
                           fontSize: 15,
@@ -265,9 +266,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       if (_canResend)
                         TextButton(
                           onPressed: _isLoading ? null : _resendOtp,
-                          child: const Text(
-                            'Resend OTP',
-                            style: TextStyle(
+                          child: Text(
+                            l10n.otpResendOtp,
+                            style: const TextStyle(
                               color: Color(0xFFFF4D00),
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -293,9 +294,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         color: const Color(0xFFF8F8F8),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _focusNodes[index].hasFocus 
-            ? const Color(0xFFFF4D00) 
-            : Colors.transparent,
+          color: _focusNodes[index].hasFocus
+              ? const Color(0xFFFF4D00)
+              : Colors.transparent,
           width: 2,
         ),
       ),
@@ -324,7 +325,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             _focusNodes[index - 1].requestFocus();
           }
           if (value.isNotEmpty && index == 5) {
-             _verifyOtp();
+            _verifyOtp();
           }
         },
       ),

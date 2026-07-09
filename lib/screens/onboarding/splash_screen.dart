@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -112,17 +113,17 @@ class _SplashScreenState extends State<SplashScreen> {
             const Spacer(),
             Center(
               child: Image.asset(
-                'assets/images/logo.png',
+                'assets/images/logo_icon.png.jpeg',
                 width: MediaQuery.of(context).size.width * 0.8,
               ),
             ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: const Text(
-                'Get premium quality fuel delivered directly to your vehicle, wherever you are',
+              child: Text(
+                AppLocalizations.of(context)!.splashTagline,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 15,
                   color: Colors.black54,
                   fontWeight: FontWeight.w500,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import '../../services/otp_service.dart';
@@ -10,6 +11,7 @@ import 'profile_setup_screen.dart';
 import 'vehicle_info_screen.dart';
 import 'document_verification_screen.dart';
 import 'forgot_password_screen.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -24,12 +26,13 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _login() async {
+    final l10n = AppLocalizations.of(context)!;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter email and password")),
+        SnackBar(content: Text(l10n.loginEmptyFields)),
       );
       return;
     }
@@ -42,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
         Widget nextRoute = const DashboardScreen();
-        
+
         if (res.user != null) {
           try {
             final profile = await Supabase.instance.client
@@ -50,19 +53,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 .select()
                 .eq('id', res.user!.id)
                 .maybeSingle();
-                
+
             if (profile == null) {
-              // Get name from user metadata if available
               final userMeta = res.user!.userMetadata;
               final fullName = userMeta?['full_name'] ?? email.split('@').first;
-              
+
               await Supabase.instance.client.from('drivers').insert({
                 'id': res.user!.id,
                 'full_name': fullName,
                 'email': email,
                 'phone': userMeta?['phone'] ?? '',
               });
-              
+
               nextRoute = const DocumentVerificationScreen();
             } else {
               final docsSubmitted = profile['documents_submitted'] == true;
@@ -82,12 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
             debugPrint("Failed to create/check driver profile on login: $e");
           }
 
-          // Sync notification token now that user is logged in
           unawaited(NotificationService.syncToken());
 
-          // Trigger OTP
           final otpSent = await OtpService.sendOtp(email);
-          
+
           if (mounted) {
             if (otpSent) {
               Navigator.of(context).push(
@@ -100,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
               );
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Failed to send verification code. Please try again.")),
+                SnackBar(content: Text(l10n.loginFailedVerification)),
               );
             }
           }
@@ -114,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("An unexpected error occurred")),
+          SnackBar(content: Text(AppLocalizations.of(context)!.loginUnexpectedError)),
         );
       }
     } finally {
@@ -131,6 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -141,9 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 40),
-                const Text(
-                  'Welcome Back',
-                  style: TextStyle(
+                Text(
+                  l10n.loginWelcomeBack,
+                  style: const TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF1F1F1F),
@@ -151,25 +152,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Sign in to continue',
-                  style: TextStyle(
+                Text(
+                  l10n.loginSignInToContinue,
+                  style: const TextStyle(
                     fontSize: 18,
                     color: Color(0xFF666666),
                     fontWeight: FontWeight.w400,
                   ),
                 ),
                 const SizedBox(height: 48),
-                _buildLabel('Email Address'),
+                _buildLabel(l10n.loginEmailAddress),
                 _buildTextField(
-                  'alex@example.com',
+                  l10n.loginEmailHint,
                   keyboardType: TextInputType.emailAddress,
                   controller: _emailController,
                 ),
                 const SizedBox(height: 24),
-                _buildLabel('Password'),
+                _buildLabel(l10n.loginPassword),
                 _buildTextField(
-                  'Enter your password',
+                  l10n.loginPasswordHint,
                   isPassword: true,
                   obscureText: _obscurePassword,
                   controller: _passwordController,
@@ -195,9 +196,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text(
-                      'Forgot Password?',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.loginForgotPassword,
+                      style: const TextStyle(
                         color: Color(0xFFFF4D00),
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -223,16 +224,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
+                            children: [
                               Text(
-                                'Sign In',
-                                style: TextStyle(
+                                l10n.loginSignIn,
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              SizedBox(width: 8),
-                              Icon(Icons.arrow_forward, size: 20),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward, size: 20),
                             ],
                           ),
                   ),
@@ -243,9 +244,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                        "Don't have an account? ",
-                        style: TextStyle(
+                      Text(
+                        l10n.loginNoAccount,
+                        style: const TextStyle(
                           color: Color(0xFF666666),
                           fontSize: 15,
                         ),
@@ -258,9 +259,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         },
-                        child: const Text(
-                          'Sign Up',
-                          style: TextStyle(
+                        child: Text(
+                          l10n.loginSignUp,
+                          style: const TextStyle(
                             color: Color(0xFFFF4D00),
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -334,5 +335,4 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
 }

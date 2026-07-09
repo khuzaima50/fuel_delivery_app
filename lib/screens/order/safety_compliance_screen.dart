@@ -29,16 +29,9 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
   bool isFuelCapClosed = false;
   bool isNozzleSecured = false;
   bool _isFinalizing = false;
-  bool _awaitingConfirmation = false; // true while waiting for customer to confirm
-  String? _pendingOrderId;            // order ID after driver taps "Request Confirmation"
-  RealtimeChannel? _orderChannel;
-  StreamSubscription? _orderSubscription;
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
-    _orderSubscription?.cancel();
-    _orderChannel?.unsubscribe();
     super.dispose();
   }
 
@@ -333,7 +326,7 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                         ],
                       )
                     : const Text(
-                        'Request Customer Confirmation',
+                        'Complete Delivery',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
@@ -341,79 +334,6 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                       ),
               ),
             ),
-            const SizedBox(height: 16),
-
-            // ── Waiting for customer panel ──────────────────────────────────
-            if (_awaitingConfirmation)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF9F0),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFFFE0B2)),
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(
-                      width: 36,
-                      height: 36,
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFFF8C00),
-                        strokeWidth: 3,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Waiting for Customer Confirmation',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1C2733),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'The customer has been notified. This screen will update automatically once they confirm receipt.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF888888),
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        TextButton.icon(
-                          onPressed: () => _pollOnce(_pendingOrderId!),
-                          icon: const Icon(Icons.refresh_rounded, color: Color(0xFFFF8C00), size: 18),
-                          label: const Text(
-                            'Refresh',
-                            style: TextStyle(
-                              color: Color(0xFFFF8C00),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        TextButton(
-                          onPressed: _cancelWaiting,
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: Color(0xFFAAAAAA),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
 
             const SizedBox(height: 20),
             const Text(
@@ -509,205 +429,6 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
     );
   }
 
-  // ── Cancel waiting — reset to pre-confirmation state ──────────────────────
-  Future<void> _cancelWaiting() async {
-    final orderId = _pendingOrderId;
-    _pollTimer?.cancel();
-    _orderSubscription?.cancel();
-    _orderChannel?.unsubscribe();
-    _orderChannel = null;
-    _orderSubscription = null;
-    if (orderId != null) {
-      try {
-        await Supabase.instance.client
-            .from('orders')
-            .update({'status': 'assigned'})
-            .eq('id', orderId);
-      } catch (e) {
-        debugPrint('[SafetyCompliance] Cancel reset failed: $e');
-      }
-    }
-    if (mounted) setState(() => _awaitingConfirmation = false);
-  }
-
-  // ── Subscribe to order status changes ──────────────────────────────────────
-  Timer? _pollTimer; // fallback poll in case Realtime misses the event
-
-  bool _isDeliveredStatus(String? s) {
-    if (s == null) return false;
-    final v = s.toUpperCase().trim();
-    // We only wait for 'COMPLETED' (or synonyms) from the customer.
-    // 'DELIVERED' is the status the driver sets while WAITING for confirmation.
-    return v == 'COMPLETED' || v == 'CONFIRMED' || v == 'COMPLETED_BY_CUSTOMER';
-  }
-
-  void _listenForCustomerConfirmation(String orderId) {
-    _orderChannel?.unsubscribe();
-    _orderSubscription?.cancel();
-    _pollTimer?.cancel();
-
-    // 1. Realtime Stream (Recommended) - Monitor for COMPLETED status
-    _orderSubscription = Supabase.instance.client
-        .from('orders')
-        .stream(primaryKey: ['id'])
-        .eq('id', orderId)
-        .listen((data) {
-      if (data.isNotEmpty && mounted) {
-        final status = data.first['status']?.toString().toUpperCase().trim();
-        debugPrint('[SafetyCompliance] Realtime Status Sync → $status');
-        
-        if (status == 'COMPLETED') {
-          debugPrint('[SafetyCompliance] Order COMPLETED detected via Stream!');
-          _pollTimer?.cancel();
-          _orderSubscription?.cancel();
-          
-          // Stop any local loading spinners
-          setState(() {
-            _isFinalizing = false;
-            _awaitingConfirmation = false;
-          });
-          
-          _completeAfterConfirmation(orderId);
-        } else if (_isDeliveredStatus(status)) {
-          // Other delivered statuses
-          _pollTimer?.cancel();
-          _orderSubscription?.cancel();
-          _completeAfterConfirmation(orderId);
-        }
-      }
-    });
-
-    // 2. Polling Fallback: poll every 5 seconds as requested
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      await _pollOnce(orderId);
-    });
-  }
-
-  // One-shot DB check — navigates if customer already confirmed
-  Future<void> _pollOnce(String orderId) async {
-    try {
-      final row = await Supabase.instance.client
-          .from('orders')
-          .select('status')
-          .eq('id', orderId)
-          .maybeSingle();
-      debugPrint('[SafetyCompliance] Poll status → ${row?['status']}');
-      if (_isDeliveredStatus(row?['status']?.toString()) && mounted) {
-        _pollTimer?.cancel();
-        _orderSubscription?.cancel();
-        _orderChannel?.unsubscribe();
-        _completeAfterConfirmation(orderId);
-      }
-    } catch (e) {
-      debugPrint('[SafetyCompliance] Poll error: $e');
-    }
-  }
-
-  // ── Run all DB writes AFTER customer confirms ───────────────────────────────
-  Future<void> _completeAfterConfirmation(String orderId) async {
-    if (!mounted) return;
-    setState(() => _isFinalizing = true);
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('Not logged in.');
-
-      final double totalAmount =
-          widget.computedTotal ?? (widget.deliveredGallons * widget.pricePerGallon);
-      final String nowIso = DateTime.now().toUtc().toIso8601String();
-
-      // Link proof photo
-      if (widget.meterPhotoUrl != null) {
-        try {
-          await Supabase.instance.client.from('delivery_proofs').insert({
-            'order_id': orderId,
-            'photo_url': widget.meterPhotoUrl,
-            'proof_type': 'meter_reading',
-          });
-        } catch (e) {
-          debugPrint('[SafetyCompliance] delivery_proofs insert skipped: $e');
-        }
-      }
-
-      // Safety checklist log
-      try {
-        await Supabase.instance.client.from('safety_checklists').insert({
-          'driver_id': user.id,
-          'order_id': orderId,
-          'is_parking_brake_set': true,
-          'is_engine_off': isFuelCapClosed,
-          'no_smoking_or_flames': isNozzleSecured,
-        });
-      } catch (e) {
-        debugPrint('[SafetyCompliance] safety_checklists insert skipped: $e');
-      }
-
-      // Final order update (only timestamps and housekeeping)
-      // Prices and Gallons were already saved in _finalizeDelivery.
-      try {
-        await Supabase.instance.client.from('orders').update({
-          'driver_id': user.id,
-          'completed_at': nowIso,
-          'delivered_at': nowIso,
-          'is_delivered': true,
-        }).eq('id', orderId);
-      } catch (e) {
-        debugPrint('[SafetyCompliance] Final metadata update skipped: $e');
-      }
-
-      // Notify customer
-      final userId = widget.order?['user_id']?.toString();
-      if (userId != null && userId.isNotEmpty) {
-        NotificationService.notifyUserOrderCompleted(userId, orderId);
-      }
-      NotificationService.showImmediateNotification(
-        title: 'Delivery Complete! ✅',
-        body: 'Order #${orderId.substring(0, 4).toUpperCase()} confirmed.',
-        type: 'order',
-        orderId: orderId,
-      );
-
-      // Earnings
-      try {
-        await Supabase.instance.client.from('earnings').insert({
-          'driver_id': user.id,
-          'order_id': orderId,
-          'amount': totalAmount,
-          'tip_amount': 0.0,
-          'description': 'Earnings from Order $orderId',
-          'status': 'COMPLETED',
-        });
-      } catch (e) {
-        debugPrint('[SafetyCompliance] earnings insert error: $e');
-      }
-
-      if (mounted) {
-        setState(() => _isFinalizing = false);
-        _navigateToSuccess({
-          ...(widget.order ?? {}),
-          'id': orderId,
-          'status': 'COMPLETED',
-          'total_amount': totalAmount,
-          'driver_earning': totalAmount,
-          'fuel_quantity': widget.deliveredGallons,
-          'fuel_quantity_gallons': widget.deliveredGallons,
-          'fuel_type': widget.order?['fuel_type'] ?? 'Fuel',
-          'delivery_address':
-              widget.order?['delivery_address'] ?? 'Customer Location',
-          'completed_at': nowIso,
-          'delivered_at': nowIso,
-        });
-      }
-    } catch (e) {
-      debugPrint('[SafetyCompliance] _completeAfterConfirmation ERROR: $e');
-      if (mounted) {
-        setState(() {
-          _isFinalizing = false;
-          _awaitingConfirmation = false; // Reset waiting state on error to allow retry
-        });
-      }
-    }
-  }
-
   void _navigateToSuccess(Map<String, dynamic> completedOrder) {
     if (!mounted) return;
 
@@ -731,7 +452,6 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
     );
   }
 
-  /// Driver taps "Request Customer Confirmation"
   Future<void> _finalizeDelivery() async {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _isFinalizing = true);
@@ -739,7 +459,6 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception('Not logged in.');
 
-      // Resolve order ID
       String? orderId = widget.order?['id']?.toString();
       if (orderId == null) {
         final res = await Supabase.instance.client
@@ -755,10 +474,6 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
       }
       if (orderId == null) throw Exception('Order ID could not be determined.');
 
-      // Set status → 'delivered' so customer sees confirmation prompt in their app.
-      // IMPORTANT: Do NOT set 'completed' here — that status is reserved for when
-      // the CUSTOMER presses "Submit & Go Home". Setting it here would cause an
-      // immediate false-positive in the polling loop.
       final qty = widget.deliveredGallons;
       final unitPrice = double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
                         double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
@@ -766,59 +481,90 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
       final totalPrice = widget.computedTotal ?? (qty * unitPrice);
       final earningRate = double.tryParse(widget.order?['earning_rate']?.toString() ?? '0.1') ?? 0.1;
       final earned = totalPrice * earningRate;
+      final nowIso = DateTime.now().toUtc().toIso8601String();
 
-      // 3. Database Update (Source of Truth)
-      // We attempt to save everything, but if it fails, we fall back to just the status.
-      // This ensures the delivery flow continues even if some columns are missing in the schema.
-      try {
-        debugPrint('[SafetyCompliance] Attempting full DB Update: status → DELIVERED for order $orderId');
-        await Supabase.instance.client
-            .from('orders')
-            .update({
-              'status': 'DELIVERED',
-              'fuel_quantity': qty,
-              'fuel_quantity_gallons': qty,
-              'total_amount': totalPrice,
-              'driver_earning': earned,
-              'delivered_at': DateTime.now().toUtc().toIso8601String(),
-              'meter_photo_url': widget.meterPhotoUrl,
-            })
-            .eq('id', orderId);
-        debugPrint('[SafetyCompliance] SUCCESS: Full order update complete.');
-      } catch (fullError) {
-        debugPrint('[SafetyCompliance] Full update failed, trying status-only update: $fullError');
+      // 1. Order Update -> COMPLETED
+      await Supabase.instance.client
+          .from('orders')
+          .update({
+            'status': 'COMPLETED',
+            'fuel_quantity': qty,
+            'fuel_quantity_gallons': qty,
+            'total_amount': totalPrice,
+            'driver_earning': earned,
+            'completed_at': nowIso,
+            'delivered_at': nowIso,
+          })
+          .eq('id', orderId);
+
+      // 2. Delivery Proofs
+      if (widget.meterPhotoUrl != null) {
         try {
-          await Supabase.instance.client
-              .from('orders')
-              .update({
-                'status': 'DELIVERED',
-              })
-              .eq('id', orderId);
-          debugPrint('[SafetyCompliance] SUCCESS: Status-only update complete.');
-        } catch (statusError) {
-          debugPrint('[SafetyCompliance] CRITICAL: Status update failed: $statusError');
-          // If status update fails, we cannot proceed. Rethrow to show error in UI.
-          rethrow;
+          await Supabase.instance.client.from('delivery_proofs').insert({
+            'order_id': orderId,
+            'photo_url': widget.meterPhotoUrl,
+            'proof_type': 'meter_reading',
+          });
+        } catch (e) {
+          debugPrint('[SafetyCompliance] Delivery Proof Insert Error: $e');
         }
       }
 
-      // Notify customer to confirm
+      // 3. Safety Checklists
+      try {
+        await Supabase.instance.client.from('safety_checklists').insert({
+          'driver_id': user.id,
+          'order_id': orderId,
+          'is_parking_brake_set': true,
+          'is_engine_off': isFuelCapClosed,
+          'no_smoking_or_flames': isNozzleSecured,
+        });
+      } catch (_) {}
+
+      // 4. Earnings
+      try {
+        await Supabase.instance.client.from('earnings').insert({
+          'driver_id': user.id,
+          'order_id': orderId,
+          'amount': earned,
+          'tip_amount': 0.0,
+          'description': 'Earnings from Order $orderId',
+          'status': 'COMPLETED',
+        });
+      } catch (_) {}
+
+      // 5. Notify customer
       final userId = widget.order?['user_id']?.toString();
       if (userId != null && userId.isNotEmpty) {
         try {
-          NotificationService.notifyUserAwaitingConfirmation(userId, orderId);
+          NotificationService.notifyUserOrderCompleted(userId, orderId);
         } catch (_) {}
       }
 
-      _pendingOrderId = orderId;
+      NotificationService.showImmediateNotification(
+        title: 'Delivery Complete! ✅',
+        body: 'Order #${orderId.substring(0, 4).toUpperCase()} confirmed.',
+        type: 'order',
+        orderId: orderId,
+      );
+
       if (mounted) {
-        setState(() {
-          _isFinalizing = false;
-          _awaitingConfirmation = true;
+        setState(() => _isFinalizing = false);
+        _navigateToSuccess({
+          ...(widget.order ?? {}),
+          'id': orderId,
+          'status': 'COMPLETED',
+          'total_amount': totalPrice,
+          'driver_earning': earned,
+          'fuel_quantity': qty,
+          'fuel_quantity_gallons': qty,
+          'fuel_type': widget.order?['fuel_type'] ?? 'Fuel',
+          'delivery_address': widget.order?['delivery_address'] ?? 'Customer Location',
+          'completed_at': nowIso,
+          'delivered_at': nowIso,
         });
-        // Start listening for customer confirmation
-        _listenForCustomerConfirmation(orderId);
       }
+
     } catch (e) {
       debugPrint('[SafetyCompliance] _finalizeDelivery ERROR: $e');
       if (mounted) {

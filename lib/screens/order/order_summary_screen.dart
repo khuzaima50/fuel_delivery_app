@@ -5,7 +5,17 @@ import 'package:intl/intl.dart';
 
 class OrderSummaryScreen extends StatelessWidget {
   final DateTime? scheduledDateTime;
-  const OrderSummaryScreen({super.key, this.scheduledDateTime});
+  final double? deliveryLat;
+  final double? deliveryLng;
+  final String? deliveryAddress;
+
+  const OrderSummaryScreen({
+    super.key,
+    this.scheduledDateTime,
+    this.deliveryLat,
+    this.deliveryLng,
+    this.deliveryAddress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -205,13 +215,15 @@ class OrderSummaryScreen extends StatelessWidget {
               // Implementation of saving to Supabase
               try {
                 final orderData = {
-                  'customer_id': user.id,
+                  'user_id': user.id,
                   'fuel_type': 'Regular',
                   'fuel_quantity': 15.0,
                   'total_amount': 52.35,
                   'status': 'assigned', // For demo purposes, auto-assigning
                   'scheduled_time': scheduledDateTime?.toIso8601String(),
-                  'delivery_address': '123 Main Street, San Francisco, CA 94102',
+                  'delivery_address': deliveryAddress ?? '123 Innovation Drive, San Francisco, CA 94105',
+                  'delivery_lat': deliveryLat ?? 24.8607,
+                  'delivery_lng': deliveryLng ?? 67.0011,
                   'created_at': DateTime.now().toIso8601String(),
                 };
 
@@ -226,8 +238,8 @@ class OrderSummaryScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) => OrderTrackingScreen(
                         order: response,
-                        deliveryLat: 37.7749, // Dummy for demo
-                        deliveryLng: -122.4194,
+                        deliveryLat: deliveryLat ?? 24.8607,
+                        deliveryLng: deliveryLng ?? 67.0011,
                         deliveryAddress: orderData['delivery_address'] as String?,
                         fuelInfo: 'Regular · 15 Gallons',
                       ),

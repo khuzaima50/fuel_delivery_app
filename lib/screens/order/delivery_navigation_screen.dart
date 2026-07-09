@@ -8,8 +8,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../../services/location_service.dart';
-import 'safety_checklist_starting_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'fuel_pickup_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DeliveryNavigationScreen — Driver navigation TO customer location.
@@ -73,31 +73,80 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
 
 
 
+  bool _isResolvingDestination = false;
+
   @override
   void initState() {
     super.initState();
-
-    final order = widget.order;
-    double? lat = _parseDouble(order?['customer_lat']) ??
-        _parseDouble(order?['delivery_lat']);
-    double? lng = _parseDouble(order?['customer_lng']) ??
-        _parseDouble(order?['delivery_lng']);
-    if (lat == 0.0 && lng == 0.0) {
-      lat = null;
-      lng = null;
-    }
-    _destLat = lat;
-    _destLng = lng;
-    _destinationLabel =
-        order?['delivery_address']?.toString() ?? 'Customer Location';
 
     _markerAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
 
+    _destinationLabel = widget.order?['delivery_address']?.toString() ?? 'Customer Location';
+    _resolveDestination();
     _startLocationStream();
-    _fetchRouteEarly();
+  }
+
+  Future<void> _resolveDestination() async {
+    if (_isResolvingDestination) return;
+    if (mounted) setState(() => _isResolvingDestination = true);
+
+    final order = widget.order;
+    double? lat = _parseDouble(order?['customer_lat']) ??
+        _parseDouble(order?['delivery_lat']) ??
+        _parseDouble(order?['latitude']) ??
+        _parseDouble(order?['delivery_latitude']) ??
+        _parseDouble(order?['lat']);
+    double? lng = _parseDouble(order?['customer_lng']) ??
+        _parseDouble(order?['delivery_lng']) ??
+        _parseDouble(order?['longitude']) ??
+        _parseDouble(order?['delivery_longitude']) ??
+        _parseDouble(order?['lng']);
+        
+    if (lat == 0.0 && lng == 0.0) {
+      lat = null;
+      lng = null;
+    }
+
+    if ((lat == null || lng == null) && _destinationLabel.isNotEmpty && _apiKey.isNotEmpty) {
+      debugPrint('[DeliveryNav] No lat/lng in DB — attempting Geocoding for: "$_destinationLabel"');
+      try {
+        final uri = Uri.parse(
+          'https://maps.googleapis.com/maps/api/geocode/json'
+          '?address=${Uri.encodeComponent(_destinationLabel)}&key=$_apiKey',
+        );
+        final resp = await http.get(uri).timeout(const Duration(seconds: 10));
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          final results = data['results'] as List?;
+          if (results != null && results.isNotEmpty) {
+            final loc = results.first['geometry']['location'];
+            lat = (loc['lat'] as num).toDouble();
+            lng = (loc['lng'] as num).toDouble();
+            debugPrint('[DeliveryNav] Geocoded: $lat, $lng');
+          }
+        }
+      } catch (e) {
+        debugPrint('[DeliveryNav] Geocoding failed: $e');
+      }
+    }
+
+    if (lat != null && lng != null) {
+      if (mounted) {
+        setState(() {
+          _destLat = lat;
+          _destLng = lng;
+          _isResolvingDestination = false;
+        });
+      }
+      _fetchRouteEarly();
+    } else {
+      if (mounted) {
+        setState(() => _isResolvingDestination = false);
+      }
+    }
   }
 
   Future<void> _fetchRouteEarly() async {
@@ -113,10 +162,22 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       _currentMarkerPos = latLng;
       _updateDriverMarker(latLng, pos.heading);
       if (_destLat != null && _destLng != null && !_routeFetched) {
+        debugPrint('[DeliveryNav] Early GPS fix – triggering route fetch');
         _fetchRoute(pos);
       }
     } catch (e) {
       debugPrint('[DeliveryNav] Early GPS fix failed: $e');
+      try {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last != null && mounted) {
+          final latLng = LatLng(last.latitude, last.longitude);
+          _currentMarkerPos = latLng;
+          _updateDriverMarker(latLng, last.heading);
+          if (_destLat != null && _destLng != null && !_routeFetched) {
+            _fetchRoute(last);
+          }
+        }
+      } catch (_) {}
     }
   }
 
@@ -159,16 +220,22 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     _currentMarkerPos = newLatLng;
 
     _markerAnimController?.reset();
-    _markerAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-          parent: _markerAnimController!, curve: Curves.easeInOut),
-    )..addListener(() {
-        if (!mounted) return;
-        final interp = _lerpLatLng(
-            _prevMarkerPos!, _currentMarkerPos!, _markerAnim!.value);
-        _updateDriverMarker(interp, pos.heading);
-      });
-    _markerAnimController?.forward();
+    final prevPos = _prevMarkerPos;
+    final currPos = _currentMarkerPos;
+    if (prevPos != null && currPos != null && _markerAnimController != null) {
+      _markerAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+            parent: _markerAnimController!, curve: Curves.easeInOut),
+      )..addListener(() {
+          if (!mounted) return;
+          final interp = _lerpLatLng(
+              prevPos, currPos, _markerAnim?.value ?? 1.0);
+          _updateDriverMarker(interp, pos.heading);
+        });
+      _markerAnimController?.forward();
+    } else {
+      _updateDriverMarker(newLatLng, pos.heading);
+    }
 
     // Stats
     if (_destLat != null && _destLng != null) _updateStats(pos);
@@ -694,45 +761,46 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                     child: ElevatedButton(
                       onPressed: () async {
                         final orderId = widget.order?['id']?.toString();
-                        if (orderId == null) return;
+                        if (orderId == null) {
+                          if (!context.mounted) return;
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  FuelPickupScreen(order: widget.order),
+                            ),
+                          );
+                          return;
+                        }
 
                         try {
                           final now = DateTime.now().toUtc().toIso8601String();
+                          // Only update arrived_at — do NOT set status here because
+                          // 'ARRIVED_AT_SOURCE' is not a valid order_status enum value.
+                          // Status will be set to IN_PROGRESS by FuelPickupScreen.
                           try {
                             await Supabase.instance.client.from('orders').update({
-                              'status': 'DRIVER_ARRIVED',
                               'arrived_at': now,
                             }).eq('id', orderId);
                           } catch (e) {
-                            debugPrint('[DeliveryNavigation] arrived_at update failed: $e');
-                            await Supabase.instance.client.from('orders').update({
-                              'status': 'DRIVER_ARRIVED',
-                            }).eq('id', orderId);
+                            debugPrint('[DeliveryNavigation] arrived_at update failed (column may not exist): $e');
                           }
 
-                          widget.order?['status'] = 'DRIVER_ARRIVED';
                           widget.order?['arrived_at'] = now;
 
                           if (!context.mounted) return;
-                          
-                          Navigator.of(context).push(
+                          Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
                               builder: (context) =>
-                                  SafetyChecklistStartingScreen(order: widget.order),
+                                  FuelPickupScreen(order: widget.order),
                             ),
                           );
-                          
                         } catch (e) {
                           debugPrint('[DeliveryNavigation] Error: $e');
                           if (!context.mounted) return;
-                          
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Failed to update: $e')),
-                          );
-                          Navigator.of(context).push(
+                          Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
                               builder: (context) =>
-                                  SafetyChecklistStartingScreen(order: widget.order),
+                                  FuelPickupScreen(order: widget.order),
                             ),
                           );
                         }
@@ -750,7 +818,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                           Icon(Icons.check_circle_rounded, size: 20),
                           SizedBox(width: 10),
                           Text(
-                            'Arrived at Customer',
+                            'Arrived at Source',
                             style: TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.w700),
                           ),

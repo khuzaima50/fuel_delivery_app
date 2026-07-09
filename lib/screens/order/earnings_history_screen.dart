@@ -25,7 +25,20 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
           .from('orders')
           .select()
           .eq('driver_id', user.id)
-          .order('completed_at', ascending: false);
+          .inFilter('status', ['completed', 'delivered', 'COMPLETED', 'DELIVERED'])
+          .order('created_at', ascending: false)
+          .then((data) {
+            // Sort completed orders — those with completed_at first, then fallback to created_at
+            final list = List<Map<String, dynamic>>.from(data);
+            list.sort((a, b) {
+              final aTime = a['completed_at'] ?? a['delivered_at'] ?? a['updated_at'] ?? a['created_at'];
+              final bTime = b['completed_at'] ?? b['delivered_at'] ?? b['updated_at'] ?? b['created_at'];
+              if (aTime == null) return 1;
+              if (bTime == null) return -1;
+              return bTime.toString().compareTo(aTime.toString());
+            });
+            return list;
+          });
     } else {
       _ordersFuture = Future.value([]);
     }
@@ -117,20 +130,12 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
 
           final currentUser = Supabase.instance.client.auth.currentUser;
           final now = DateTime.now();
-          final todayStart = DateTime(now.year, now.month, now.day);
 
-          // Only show THIS driver's TODAY completed orders
+          // Show all of THIS driver's completed/delivered orders
           final orders = (snapshot.data ?? []).where((o) {
             final status = o['status']?.toString().toLowerCase();
             if (o['driver_id']?.toString() != currentUser?.id) return false;
-            if (status != 'completed' && status != 'delivered') return false;
-            if (o['completed_at'] == null) return false;
-            try {
-              final d = DateTime.parse(o['completed_at']).toLocal();
-              return !d.isBefore(todayStart);
-            } catch (_) {
-              return false;
-            }
+            return status == 'completed' || status == 'delivered';
           }).toList();
 
           if (orders.isEmpty) {
@@ -161,11 +166,17 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
           // Group orders by day label
           final Map<String, List<Map<String, dynamic>>> grouped = {};
           for (final order in orders) {
-            try {
-              final d = DateTime.parse(order['completed_at']).toLocal();
-              final label = _dayLabel(d, now);
-              grouped.putIfAbsent(label, () => []).add(order);
-            } catch (_) {}
+            final timeField = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
+            if (timeField != null) {
+              try {
+                var d = DateTime.parse(timeField.toString()).toLocal();
+                if (d.isAfter(now)) {
+                  d = now;
+                }
+                final label = _dayLabel(d, now);
+                grouped.putIfAbsent(label, () => []).add(order);
+              } catch (_) {}
+            }
           }
 
           return ListView(
@@ -187,12 +198,19 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
                 ...entry.value.map((order) {
                   final fuelType = order['fuel_type'] ?? 'Fuel';
                   final qty = order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? 0;
-                  final amount =
-                      double.tryParse(order['total_amount']?.toString() ?? '0') ?? 0.0;
+                  final rawEarning = order['driver_earning'] ?? order['total_amount'] ?? '0';
+                  final amount = double.tryParse(rawEarning.toString()) ?? 0.0;
                   DateTime? d;
-                  try {
-                    d = DateTime.parse(order['completed_at']).toLocal();
-                  } catch (_) {}
+                  final timeField = order['completed_at'] ?? order['delivered_at'] ?? order['updated_at'] ?? order['created_at'];
+                  if (timeField != null) {
+                    try {
+                      var parsedDate = DateTime.parse(timeField.toString()).toLocal();
+                      if (parsedDate.isAfter(now)) {
+                        parsedDate = now;
+                      }
+                      d = parsedDate;
+                    } catch (_) {}
+                  }
                   final timeStr = d != null ? _formatDate(d) : '—';
 
                   return Padding(

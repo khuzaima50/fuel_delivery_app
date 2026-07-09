@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'services/notification_service.dart';
 import 'services/app_globals.dart';
+import 'services/locale_service.dart';
 import 'widgets/app_lifecycle_manager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -28,6 +31,9 @@ void main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
+  // Load saved locale before app starts
+  await LocaleService().loadSavedLocale();
+
   try {
     await Firebase.initializeApp();
     if (Firebase.apps.isNotEmpty) {
@@ -40,14 +46,15 @@ void main() async {
     debugPrint("Firebase init failed: $e");
   }
 
-  runApp(const AppLifecycleManager(child: FuelDirectApp()));
+  runApp(AppLifecycleManager(child: FuelDirectApp(localeService: LocaleService())));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FuelDirectApp — StatefulWidget so we can hold a Stream subscription
 // ─────────────────────────────────────────────────────────────────────────────
 class FuelDirectApp extends StatefulWidget {
-  const FuelDirectApp({super.key});
+  final LocaleService localeService;
+  const FuelDirectApp({super.key, required this.localeService});
 
   @override
   State<FuelDirectApp> createState() => _FuelDirectAppState();
@@ -60,12 +67,19 @@ class _FuelDirectAppState extends State<FuelDirectApp> {
   void initState() {
     super.initState();
     _listenToAuthChanges();
+    // Rebuild when locale changes
+    widget.localeService.addListener(_onLocaleChanged);
   }
 
   @override
   void dispose() {
     _authSubscription?.cancel();
+    widget.localeService.removeListener(_onLocaleChanged);
     super.dispose();
+  }
+
+  void _onLocaleChanged() {
+    if (mounted) setState(() {});
   }
 
   /// Global auth state listener.
@@ -114,6 +128,21 @@ class _FuelDirectAppState extends State<FuelDirectApp> {
       title: 'FuelDirect',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
+
+      // ── Localization ──────────────────────────────────────────────────────
+      locale: widget.localeService.locale,
+      supportedLocales: const [
+        Locale('en'),
+        Locale('es'),
+      ],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      // ─────────────────────────────────────────────────────────────────────
+
       theme: ThemeData(
         primaryColor: const Color(0xFFFF4D00),
         scaffoldBackgroundColor: Colors.white,
