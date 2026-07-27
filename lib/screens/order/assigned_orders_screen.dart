@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../../services/notification_service.dart';
 import '../../services/driver_database_service.dart';
@@ -20,13 +21,16 @@ class AssignedOrdersScreen extends StatefulWidget {
 class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
   static StreamSubscription<Position>? _backgroundLocationStream;
   int _activeFilterIndex = 0;
-  final List<String> _filters = [
-    'Available',
-    'Assigned',
-    'Scheduled',
-    'Emergency',
-    'Delivered',
-  ];
+  List<String> _getFilters(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return [
+      l10n.assignedTabAvailable,
+      l10n.assignedTabAssigned,
+      l10n.assignedTabScheduled,
+      l10n.assignedTabEmergency,
+      l10n.assignedTabDelivered,
+    ];
+  }
 
   // ── Local order state (replaces stream() for realtime reliability) ──
   List<Map<String, dynamic>> _orders = [];
@@ -123,14 +127,15 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
 
   /// Returns formatted distance string for a given order, or null if
   /// the order has no coordinates or driver location is unknown.
-  String? _orderDistanceLabel(Map<String, dynamic> order) {
+  String? _orderDistanceLabel(Map<String, dynamic> order, BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final dPos = _driverPosition;
     if (dPos == null) return null;
     final lat = double.tryParse((order['delivery_lat'] ?? order['latitude'] ?? order['customer_lat'])?.toString() ?? '');
     final lng = double.tryParse((order['delivery_lng'] ?? order['longitude'] ?? order['customer_lng'])?.toString() ?? '');
     if (lat == null || lng == null) return null;
     final km = _distanceKm(dPos.latitude, dPos.longitude, lat, lng);
-    return km < 1 ? '${(km * 1000).round()} m away' : '${km.toStringAsFixed(1)} km away';
+    return km < 1 ? l10n.dashboardMetersAway((km * 1000).round()) : l10n.dashboardKmAway(km.toStringAsFixed(1));
   }
 
   // ── Initial fetch ──────────────────────────────────────────────────
@@ -340,14 +345,14 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
+              content: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.white),
-                  SizedBox(width: 12),
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Sorry, this order was just accepted by another driver.',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      AppLocalizations.of(context)!.dashboardOrderTakenByAnother,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -438,14 +443,14 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 12),
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Order accepted! Tap it to start delivery.',
-                  style: TextStyle(color: Colors.white),
+                  AppLocalizations.of(context)!.assignedOrderAccepted,
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
             ],
@@ -462,7 +467,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       await _fetchOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.red, content: Text("Failed: $e")),
+          SnackBar(backgroundColor: Colors.red, content: Text("${AppLocalizations.of(context)!.dashboardFailedAction}$e")),
         );
       }
     }
@@ -521,9 +526,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             ),
           ),
         ),
-        title: const Text(
-          'Assigned Orders',
-          style: TextStyle(
+        title: Text(
+          AppLocalizations.of(context)!.assignedTitle,
+          style: const TextStyle(
             color: Color(0xFF1F1F1F),
             fontSize: 18,
             fontWeight: FontWeight.w800,
@@ -540,8 +545,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filters.length,
+              itemCount: _getFilters(context).length,
               itemBuilder: (context, index) {
+                final filters = _getFilters(context);
                 bool isActive = _activeFilterIndex == index;
                 return GestureDetector(
                   onTap: () => setState(() => _activeFilterIndex = index),
@@ -556,7 +562,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      _filters[index],
+                      filters[index],
                       style: TextStyle(
                         color: isActive
                             ? Colors.white
@@ -584,13 +590,13 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                               children: [
                                 const Icon(Icons.wifi_off_rounded, size: 64, color: Colors.grey),
                                 const SizedBox(height: 16),
-                                const Text('Failed to load orders',
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                 Text(AppLocalizations.of(context)!.assignedFailedLoad,
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 24),
                                 ElevatedButton.icon(
                                   onPressed: () { _fetchOrders(); _subscribeToOrderChanges(); },
                                   icon: const Icon(Icons.refresh),
-                                  label: const Text('Retry'),
+                                  label: Text(AppLocalizations.of(context)!.common_retry),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFFFF4D00),
                                     foregroundColor: Colors.white,
@@ -619,19 +625,19 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
           children: [
             Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            const Text(
-              'You are currently Offline',
-              style: TextStyle(
+            Text(
+              AppLocalizations.of(context)!.dashboardOfflineCardTitle,
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1F1F1F),
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Go online from the Dashboard to see available orders.',
+            Text(
+              AppLocalizations.of(context)!.assignedGoOnlineDesc,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF888888)),
+              style: const TextStyle(color: Color(0xFF888888)),
             ),
           ],
         ),
@@ -751,6 +757,14 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     }
 
     if (filteredOrders.isEmpty) {
+      final l10n = AppLocalizations.of(context)!;
+      final emptyMessages = [
+        l10n.assignedNoNearby,
+        l10n.assignedNoAssignedOrders,
+        l10n.assignedNoScheduledOrders,
+        l10n.assignedNoEmergencyOrders,
+        l10n.assignedNoDeliveredOrders,
+      ];
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -764,9 +778,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              _activeFilterIndex == 0
-                  ? 'No nearby orders found'
-                  : 'No ${_filters[_activeFilterIndex].toLowerCase()} orders yet.',
+              _activeFilterIndex < emptyMessages.length
+                  ? emptyMessages[_activeFilterIndex]
+                  : l10n.assignedNoAssignedOrders,
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             if (_activeFilterIndex == 0) ...
@@ -774,10 +788,10 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                 const SizedBox(height: 8),
                 Text(
                   _driverPosition == null
-                      ? 'Waiting for GPS location…'
+                      ? l10n.assignedWaitingGps
                       : _serviceAreas.isEmpty
-                          ? 'Showing orders within 25 km of your location (fallback).'
-                          : 'Showing orders within ${_serviceAreas.length} configured service area(s).',
+                          ? l10n.assignedShowingNearbyFallback
+                          : l10n.assignedShowingNearbyConfigured(_serviceAreas.length),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                 ),
@@ -791,6 +805,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       padding: const EdgeInsets.only(left: 16, right: 16, bottom: 100),
       itemCount: filteredOrders.length,
       itemBuilder: (context, index) {
+        final l10n = AppLocalizations.of(context)!;
         final order = filteredOrders[index];
         final statusLow = order['status']?.toString().toLowerCase() ?? '';
         final isEmergencyOrder = statusLow == 'emergency';
@@ -813,9 +828,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             final int min = parsedTime.minute;
             final String ampm = hour >= 12 ? 'PM' : 'AM';
             final int displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-            formattedTime = 'SCHED: ${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm';
+            formattedTime = l10n.assignedSchedTime('${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm');
           } catch (_) {
-            formattedTime = 'SCHED';
+            formattedTime = l10n.assignedSched;
           }
         } else if (isAvailable) {
           if (hasValidSchedule) {
@@ -825,12 +840,12 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                 final int min = parsedTime.minute;
                 final String ampm = hour >= 12 ? 'PM' : 'AM';
                 final int displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-                formattedTime = 'SCHED: ${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm';
+                formattedTime = l10n.assignedSchedTime('${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm');
               } catch (_) {
-                formattedTime = 'NEW';
+                formattedTime = l10n.assignedNew;
               }
           } else {
-            formattedTime = 'NEW';
+            formattedTime = l10n.assignedNew;
           }
         } else {
           // For delivered orders, prefer delivered_at; otherwise use assigned/accepted/created
@@ -852,15 +867,26 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         }
 
         // Compute real distance label for the card
-        final distLabel = _orderDistanceLabel(order) ?? 'Unknown Location';
+        final distLabel = _orderDistanceLabel(order, context) ?? l10n.dashboardNoGps;
 
         return _buildOrderCard(
           id: order['id'],
           time: formattedTime,
-          address: order['delivery_address'] ?? 'Unknown Location',
+          address: order['delivery_address'] ?? l10n.dashboardNoGps,
           distance: distLabel,
-          fuelType: '${order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? '0'} Gal ${order['fuel_type'] ?? 'Fuel'}',
-          tag: isAvailable ? 'AVAILABLE' : (isEmergencyOrder ? 'EMERGENCY' : order['status']?.toString().toUpperCase() ?? 'N/A'),
+          fuelType: l10n.assignedFuelTypeFormat(
+            order['fuel_quantity']?.toString() ?? order['fuel_quantity_gallons']?.toString() ?? '0',
+            order['fuel_type']?.toString() ?? 'Fuel',
+          ),
+          tag: isAvailable
+              ? l10n.assignedTagAvailable
+              : (isEmergencyOrder
+                  ? l10n.assignedTagEmergency
+                  : (statusLow == 'delivered' || statusLow == 'completed'
+                      ? l10n.assignedTagCompleted
+                      : (statusLow == 'assigned' || statusLow == 'accepted'
+                          ? l10n.assignedTagAssigned
+                          : statusLow.toUpperCase()))),
           tagColor: isAvailable ? const Color(0xFFE8F5E9) : (isEmergencyOrder ? const Color(0xFFFFE8DD) : const Color(0xFFF3F3F3)),
           isEmergency: isEmergencyOrder,
           isAvailable: isAvailable,
@@ -1058,9 +1084,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Fuel Type',
-                              style: TextStyle(
+                            Text(
+                              AppLocalizations.of(context)!.assignedFuelType,
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF888888),
                                 fontWeight: FontWeight.w500,
@@ -1099,13 +1125,13 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10)),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.explore, size: 18),
-                                SizedBox(width: 4),
-                                Text('GO',
-                                    style: TextStyle(
+                                const Icon(Icons.explore, size: 18),
+                                const SizedBox(width: 4),
+                                Text(AppLocalizations.of(context)!.assignedGo,
+                                    style: const TextStyle(
                                         fontWeight: FontWeight.w800)),
                               ],
                             ),
@@ -1129,9 +1155,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10)),
                             ),
-                            child: const Text(
-                              'Details',
-                              style: TextStyle(
+                            child: Text(
+                              AppLocalizations.of(context)!.assignedDetails,
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF666666),
                               ),
@@ -1175,11 +1201,11 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                           ),
                         ),
                         child: _acceptingOrderId == id
-                            ? const Row(
+                            ? Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.center,
                                 children: [
-                                  SizedBox(
+                                  const SizedBox(
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
@@ -1187,10 +1213,10 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                                       strokeWidth: 2.5,
                                     ),
                                   ),
-                                  SizedBox(width: 10),
+                                  const SizedBox(width: 10),
                                   Text(
-                                    'Accepting…',
-                                    style: TextStyle(
+                                    AppLocalizations.of(context)!.dashboardAccepting,
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
                                       color: Colors.white,
@@ -1198,19 +1224,19 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
                                   ),
                                 ],
                               )
-                            : const Row(
+                            : Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.center,
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.check_circle_outline_rounded,
                                     size: 20,
                                     color: Colors.white,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'Accept Order',
-                                    style: TextStyle(
+                                    AppLocalizations.of(context)!.dashboardAcceptOrder,
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 15,
                                       color: Colors.white,

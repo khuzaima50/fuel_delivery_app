@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import 'order_details_screen.dart';
 
@@ -43,6 +44,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
@@ -67,9 +69,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
             ),
           ),
         ),
-        title: const Text(
-          'Order History',
-          style: TextStyle(
+        title: Text(
+          l10n.orderHistoryTitle,
+          style: const TextStyle(
             color: Color(0xFF333333),
             fontWeight: FontWeight.bold,
             fontSize: 18,
@@ -93,10 +95,10 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
               child: TextField(
                 controller: _searchController,
                 onChanged: (value) => setState(() => _searchQuery = value),
-                decoration: const InputDecoration(
-                  icon: Icon(Icons.search, color: Color(0xFFAAAAAA)),
-                  hintText: 'Search by location...',
-                  hintStyle: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
+                decoration: InputDecoration(
+                  icon: const Icon(Icons.search, color: Color(0xFFAAAAAA)),
+                  hintText: l10n.orderHistorySearchHint,
+                  hintStyle: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
                   border: InputBorder.none,
                 ),
               ),
@@ -121,7 +123,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                 }
                 
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error loading history: ${snapshot.error}'));
+                  return Center(child: Text(l10n.orderHistoryError(snapshot.error.toString())));
                 }
 
                 final currentUser = Supabase.instance.client.auth.currentUser;
@@ -143,9 +145,9 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                       children: [
                         Icon(Icons.history_outlined, size: 64, color: Colors.grey[300]),
                         const SizedBox(height: 16),
-                        const Text(
-                          'No completed orders found.',
-                          style: TextStyle(color: Color(0xFFAAAAAA)),
+                        Text(
+                          l10n.orderHistoryNoOrders,
+                          style: const TextStyle(color: Color(0xFFAAAAAA)),
                         ),
                       ],
                     ),
@@ -168,9 +170,12 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                       completedAt = now;
                     }
                     
+                    final fuelType = order['fuel_type']?.toString() ?? l10n.orderHistoryPlaceholderFuel;
+                    final qty = (order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? '0').toString();
+
                     return _buildOrderCard(
-                      date: '${_getMonthName(completedAt.month)} ${completedAt.day}, ${completedAt.year} • ${_formatTime(completedAt)}',
-                      vehicle: '${order['fuel_type'] ?? 'Fuel'} • ${order['fuel_quantity'] ?? order['fuel_quantity_gallons'] ?? '0'} Gal',
+                      date: '${_getMonthName(completedAt.month, l10n)} ${completedAt.day}, ${completedAt.year} • ${_formatTime(completedAt)}',
+                      vehicle: l10n.orderHistoryCardQty(fuelType, qty),
                       price: '\$${(order['total_amount'] ?? 0).toStringAsFixed(2)}',
                       address: order['delivery_address'] ?? 'Unknown Location',
                       onTap: () {
@@ -194,8 +199,12 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
     );
   }
 
-  String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  String _getMonthName(int month, AppLocalizations l10n) {
+    final months = [
+      l10n.monthJan, l10n.monthFeb, l10n.monthMar, l10n.monthApr,
+      l10n.monthMay, l10n.monthJun, l10n.monthJul, l10n.monthAug,
+      l10n.monthSep, l10n.monthOct, l10n.monthNov, l10n.monthDec
+    ];
     return months[month - 1];
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'schedule_delivery_screen.dart';
 
 class FuelSelectionScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -26,9 +28,9 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Fuel',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
+        title: Text(
+          l10n.fuelTitle,
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
       ),
@@ -59,12 +61,12 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
+                      children: [
                         Text(
-                          'Fuel Types',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          l10n.fuelTypes,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                        Text(
+                        const Text(
                           '0',
                           style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
@@ -76,18 +78,18 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                         Expanded(
                           child: _buildFuelCard(
                             index: 0,
-                            title: 'Petrol',
+                            title: l10n.fuelPetrol,
                             price: '\$1.85/Gal',
-                            subtitle: 'Octane 95 Premium',
+                            subtitle: l10n.fuelOctanePremium,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: _buildFuelCard(
                             index: 1,
-                            title: 'Diesel',
+                            title: l10n.fuelDiesel,
                             price: '\$1.32/ Gal',
-                            subtitle: 'Ultra-Low Sulfur',
+                            subtitle: l10n.fuelUltraLowSulfur,
                           ),
                         ),
                       ],
@@ -116,11 +118,11 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Align(
+                    Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Quantity',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        l10n.fuelQuantity,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -133,9 +135,9 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Approx. range: 400 miles',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    Text(
+                      l10n.fuelApproxRange,
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                     const SizedBox(height: 32),
                     // Slider
@@ -157,16 +159,16 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                         },
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('5Gal', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                          Text('25Gal', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                          Text('50Gal', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                          Text('75Gal', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                          Text('100Gal', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(l10n.orderDetailsGallons('5'), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(l10n.orderDetailsGallons('25'), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(l10n.orderDetailsGallons('50'), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(l10n.orderDetailsGallons('75'), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(l10n.orderDetailsGallons('100'), style: const TextStyle(color: Colors.grey, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -196,7 +198,7 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Full Tank',
+                              l10n.fuelFullTank,
                               style: TextStyle(
                                 color: _isFullTank ? const Color(0xFFFF6600) : Colors.grey,
                                 fontWeight: FontWeight.bold,
@@ -215,9 +217,9 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
-          border: const Border(top: BorderSide(color: Color(0xFFF5F5F5))),
+          border: Border(top: BorderSide(color: Color(0xFFF5F5F5))),
         ),
         child: SizedBox(
           width: double.infinity,
@@ -243,13 +245,13 @@ class _FuelSelectionScreenState extends State<FuelSelectionScreen> {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+              children: [
                 Text(
-                  'Confirm Order',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  l10n.selectLocationConfirmOrder,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward, size: 18),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward, size: 18),
               ],
             ),
           ),

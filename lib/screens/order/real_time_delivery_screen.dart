@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../services/location_service.dart';
 import '../../services/notification_service.dart';
 import '../chat/chat_screen.dart';
@@ -570,8 +571,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
       if (!mounted) return;
 
       if (response.statusCode != 200) {
-        debugPrint('[Route API Response] HTTP error ${response.statusCode}');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route API Response] HTTP error ${response.statusCode} — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -580,15 +581,15 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
 
       if (status != 'OK') {
         final errMsg = data['error_message'] as String? ?? 'no details';
-        debugPrint('[Route ERROR] API status=$status — $errMsg');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route ERROR] API status=$status — $errMsg — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
       final routes = data['routes'] as List?;
       if (routes == null || routes.isEmpty) {
-        debugPrint('[Route ERROR] No routes returned');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route ERROR] No routes returned — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -606,8 +607,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
           (routes[0]['overview_polyline']['points'] as String?) ?? '';
 
       if (encodedPolyline.isEmpty) {
-        debugPrint('[Polyline ERROR] Empty polyline string');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Polyline ERROR] Empty polyline string — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -654,11 +655,103 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
           _updateStats(driverPos);
         }
       } else {
-        debugPrint('[Route ERROR] No points decoded');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route ERROR] No points decoded — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
       }
     } catch (e) {
-      debugPrint('[Route ERROR] Exception: $e');
+      debugPrint('[Route ERROR] Exception: $e — trying OSRM fallback');
+      if (mounted) {
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
+      }
+    }
+  }
+
+  Future<void> _fetchRouteOSRM(Position driverPos, double dLat, double dLng) async {
+    try {
+      final osrmUri = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving'
+        '/${driverPos.longitude},${driverPos.latitude};$dLng,$dLat'
+        '?overview=full&geometries=polyline',
+      );
+      debugPrint('[Route OSRM Fallback RealTime] Fetching OSRM: $osrmUri');
+      final response = await http.get(osrmUri).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        debugPrint('[Route OSRM Fallback RealTime] HTTP error ${response.statusCode}');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final routes = data['routes'] as List?;
+      if (routes == null || routes.isEmpty) {
+        debugPrint('[Route OSRM Fallback RealTime] No routes returned');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final route = routes[0] as Map<String, dynamic>;
+      final encodedPolyline = (route['geometry'] as String?) ?? '';
+      if (encodedPolyline.isEmpty) {
+        debugPrint('[Route OSRM Fallback RealTime] Empty polyline string');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final decodedPoints = _decodePolyline(encodedPolyline);
+      debugPrint('[Route OSRM Fallback RealTime] Polyline Points count = ${decodedPoints.length}');
+
+      if (decodedPoints.isEmpty) {
+        debugPrint('[Route OSRM Fallback RealTime] No points decoded');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final double apiDistanceMeters = (route['distance'] as num?)?.toDouble() ?? 0.0;
+      final int apiDurationSecs = (route['duration'] as num?)?.toInt() ?? 0;
+
+      debugPrint('[Route OSRM Fallback RealTime Stats] duration=${apiDurationSecs}s distance=${apiDistanceMeters}m');
+
+      _routePoints
+        ..clear()
+        ..addAll(decodedPoints);
+
+      _markers.removeWhere((m) => m.markerId.value == 'destination');
+      _markers.add(Marker(
+        markerId: const MarkerId('destination'),
+        position: LatLng(dLat, dLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(title: _destAddress),
+        zIndexInt: 1,
+      ));
+
+      setState(() {
+        _routeFetched = true;
+        _isLoadingRoute = false;
+        _polylines
+          ..clear()
+          ..add(Polyline(
+            polylineId: const PolylineId('route'),
+            color: const Color(0xFF4285F4),
+            points: List<LatLng>.from(_routePoints),
+            width: 5,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
+          ));
+      });
+
+      if (apiDistanceMeters > 0) {
+        _applyStats(
+          distanceMeters: apiDistanceMeters,
+          durationSecs: apiDurationSecs,
+        );
+      } else {
+        _updateStats(driverPos);
+      }
+    } catch (osrmError) {
+      debugPrint('[Route OSRM Fallback RealTime ERROR] Exception: $osrmError');
       if (mounted) setState(() => _isLoadingRoute = false);
     }
   }
@@ -688,10 +781,11 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
 
   // ── Call customer ─────────────────────────────────────────────────────────
   Future<void> _callCustomer() async {
+    final l10n = AppLocalizations.of(context)!;
     final phone = _customerPhone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No phone number available.')),
+        SnackBar(content: Text(l10n.rtdNoPhone)),
       );
       return;
     }
@@ -705,7 +799,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch phone dialer. Please check permissions.')),
+          SnackBar(content: Text(l10n.rtdCallError)),
         );
       }
     }
@@ -754,8 +848,9 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     } catch (e) {
       debugPrint('[RealTimeDelivery] arrived update error: $e');
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update arrival: $e')),
+          SnackBar(content: Text(l10n.rtdArrivalFailed(e.toString()))),
         );
         // Fallback navigation for testing purposes so driver is not stuck
         setState(() => _isArrived = true);
@@ -773,13 +868,14 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
   // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     // ── Permission / GPS error screens ─────────────────────────────────────
     if (_gpsDisabled) {
       return _errorScreen(
-        'GPS is disabled',
-        'Please turn on Location Services in your device settings.',
+        l10n.rtdGpsDisabled,
+        l10n.rtdGpsDisabledDesc,
         Icons.location_disabled_rounded,
-        actionLabel: 'Open GPS Settings',
+        actionLabel: l10n.rtdOpenGps,
         onAction: () async {
           await Geolocator.openLocationSettings();
         },
@@ -787,10 +883,10 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     }
     if (_locationPermissionDenied) {
       return _errorScreen(
-        'Location Permission Denied',
-        'FuelDirect needs location access to navigate. Tap below to open Settings.',
+        l10n.rtdPermDenied,
+        l10n.rtdPermDeniedDesc,
         Icons.lock_rounded,
-        actionLabel: 'Open Settings',
+        actionLabel: l10n.rtdOpenSettings,
         onAction: () async {
           await Geolocator.openAppSettings();
         },
@@ -846,18 +942,18 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
               child: Container(
                 color: const Color(0xFFFF4D00).withValues(alpha: 0.9),
                 padding: const EdgeInsets.symmetric(vertical: 6),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     ),
-                    SizedBox(width: 10),
-                    Text('Locating delivery address…',
-                        style: TextStyle(
+                    const SizedBox(width: 10),
+                    Text(l10n.rtdLocating,
+                        style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
                             fontWeight: FontWeight.w600)),
@@ -890,16 +986,16 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                     const Icon(Icons.location_off_rounded,
                         color: Color(0xFFFF4D00), size: 36),
                     const SizedBox(height: 10),
-                    const Text('Delivery location not available',
-                        style: TextStyle(
+                    Text(l10n.rtdDestMissing,
+                        style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 15,
                             color: Color(0xFF1F1F1F))),
                     const SizedBox(height: 6),
                     Text(
                         _destAddress.isNotEmpty
-                            ? 'Address: $_destAddress'
-                            : 'No address on record for this order.',
+                            ? l10n.rtdAddressLabel(_destAddress)
+                            : l10n.rtdNoAddress,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                             fontSize: 13, color: Color(0xFF888888))),
@@ -909,7 +1005,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                       child: ElevatedButton.icon(
                         onPressed: _resolveDestination,
                         icon: const Icon(Icons.refresh, size: 18),
-                        label: const Text('Retry'),
+                        label: Text(l10n.rtdRetry),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF4D00),
                           foregroundColor: Colors.white,
@@ -970,8 +1066,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Delivering to',
-                                  style: TextStyle(
+                              Text(l10n.rtdDeliveringTo,
+                                  style: const TextStyle(
                                       fontSize: 11,
                                       color: Color(0xFF888888),
                                       fontWeight: FontWeight.w500)),
@@ -1032,14 +1128,14 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                   // ── Stats row ───────────────────────────────────────────
                   Row(
                     children: [
-                      _statBox('ETA', _etaTime),
+                      _statBox(l10n.rtdEtaLabel, _etaTime),
                       const SizedBox(width: 10),
-                      _statBox('TIME', '$_estimatedMinutes min'),
+                      _statBox(l10n.rtdTimeLabel, l10n.rtdMin(_estimatedMinutes.toString())),
                       const SizedBox(width: 10),
                       _statBox(
-                          'DIST',
+                          l10n.rtdDistLabel,
                           _distanceMiles > 0
-                              ? '${_distanceMiles.toStringAsFixed(1)} miles'
+                              ? l10n.rtdMiles(_distanceMiles.toStringAsFixed(1))
                               : '--'),
                     ],
                   ),
@@ -1101,8 +1197,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                                       color: Color(0xFFFFB800)),
                                 ),
                                 const SizedBox(width: 8),
-                                const Text('Customer',
-                                    style: TextStyle(
+                                Text(l10n.rtdCustomer,
+                                    style: const TextStyle(
                                         fontSize: 11,
                                         color: Color(0xFF888888),
                                         fontWeight: FontWeight.w500)),
@@ -1183,8 +1279,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
                                 const SizedBox(width: 10),
                                 Text(
                                   _isArrived
-                                      ? 'Arrived! Confirm Arrival'
-                                      : 'Arrived at Customer',
+                                      ? l10n.rtdArrivedConfirm
+                                      : l10n.rtdArrivedAt,
                                   style: const TextStyle(
                                       fontSize: 16, fontWeight: FontWeight.w800),
                                 ),
@@ -1259,6 +1355,7 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
     String? actionLabel,
     VoidCallback? onAction,
   }) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -1302,8 +1399,8 @@ class _RealTimeDeliveryScreenState extends State<RealTimeDeliveryScreen>
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Go Back',
-                    style: TextStyle(
+                child: Text(l10n.rtdGoBack,
+                    style: const TextStyle(
                         color: Color(0xFFFF4D00), fontWeight: FontWeight.w600)),
               ),
             ],

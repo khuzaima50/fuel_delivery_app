@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../services/notification_service.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -78,7 +79,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send: $e'),
+            content: Text(AppLocalizations.of(context)!.chatSendError(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -111,12 +112,13 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// Returns a label like "Today", "Yesterday", or "Mon, 5 May"
-  String _dayLabel(DateTime dt) {
+  String _dayLabel(DateTime dt, BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final d = DateTime(dt.year, dt.month, dt.day);
-    if (d == today) return 'Today';
-    if (d == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    if (d == today) return l10n.chatToday;
+    if (d == today.subtract(const Duration(days: 1))) return l10n.chatYesterday;
     return DateFormat('EEE, d MMM').format(dt);
   }
 
@@ -134,6 +136,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final initials = widget.customerName.isNotEmpty
         ? widget.customerName.trim()[0].toUpperCase()
         : 'C';
@@ -180,9 +183,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const Text(
-                    'Customer',
-                    style: TextStyle(
+                  Text(
+                    l10n.chatCustomer,
+                    style: const TextStyle(
                       fontSize: 11,
                       color: Colors.white70,
                       fontWeight: FontWeight.w500,
@@ -213,7 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text('Error: ${snapshot.error}',
+                    child: Text(l10n.chatError(snapshot.error.toString()),
                         style: const TextStyle(color: Colors.red)),
                   );
                 }
@@ -243,7 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   size: 48, color: Colors.grey[400]),
                               const SizedBox(height: 12),
                               Text(
-                                'No messages yet',
+                                l10n.chatNoMessagesTitle,
                                 style: TextStyle(
                                     color: Colors.grey[700],
                                     fontSize: 16,
@@ -251,7 +254,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Start the conversation below',
+                                l10n.chatNoMessagesSubtitle,
                                 style: TextStyle(
                                     color: Colors.grey[500], fontSize: 13),
                               ),
@@ -293,7 +296,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     return Column(
                       children: [
-                        if (showDateSep) _buildDateSeparator(msg['created_at']),
+                        if (showDateSep) _buildDateSeparator(msg['created_at'], context),
                         _ChatBubble(
                           message: msg['message'] ?? '',
                           time: _formatTime(msg['created_at']),
@@ -309,17 +312,17 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
 
           // ── Input bar ───────────────────────────────────────────────────
-          _buildInputBar(),
+          _buildInputBar(context),
         ],
       ),
     );
   }
 
-  Widget _buildDateSeparator(String? iso) {
+  Widget _buildDateSeparator(String? iso, BuildContext context) {
     String label = '';
     if (iso != null) {
       try {
-        label = _dayLabel(DateTime.parse(iso).toLocal());
+        label = _dayLabel(DateTime.parse(iso).toLocal(), context);
       } catch (_) {}
     }
     return Padding(
@@ -351,7 +354,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildInputBar() {
+  Widget _buildInputBar(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF0F0F0),
@@ -390,10 +393,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   textCapitalization: TextCapitalization.sentences,
                   onSubmitted: (_) => _sendMessage(),
                   style: const TextStyle(fontSize: 15, height: 1.4),
-                  decoration: const InputDecoration(
-                    hintText: 'Message',
-                    hintStyle: TextStyle(color: Color(0xFFAAAAAA)),
-                    contentPadding: EdgeInsets.symmetric(
+                  decoration: InputDecoration(
+                    hintText: AppLocalizations.of(context)!.chatMessageHint,
+                    hintStyle: const TextStyle(color: Color(0xFFAAAAAA)),
+                    contentPadding: const EdgeInsets.symmetric(
                         horizontal: 18, vertical: 12),
                     border: InputBorder.none,
                   ),

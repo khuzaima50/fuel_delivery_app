@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../../services/notification_service.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -61,7 +62,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           _loadNotifications();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All notifications marked as read')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.notificationsMarkAllReadSuccess)),
         );
       }
     } catch (e) {
@@ -107,9 +108,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           ),
         ),
-        title: const Text(
-          'Notifications',
-          style: TextStyle(color: Color(0xFF1F1F1F), fontSize: 16, fontWeight: FontWeight.w800),
+        title: Text(
+          AppLocalizations.of(context)!.notificationsTitle,
+          style: const TextStyle(color: Color(0xFF1F1F1F), fontSize: 16, fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
         actions: [
@@ -126,9 +127,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           TextButton(
             onPressed: _markAllAsRead,
-            child: const Text(
-              'Mark all as read',
-              style: TextStyle(color: Color(0xFFFF4D00), fontSize: 12, fontWeight: FontWeight.w700),
+            child: Text(
+              AppLocalizations.of(context)!.notificationsMarkRead,
+              style: const TextStyle(color: Color(0xFFFF4D00), fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(width: 8),
@@ -149,8 +150,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D00)));
           }
+          final l10n = AppLocalizations.of(context)!;
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text('${l10n.common_error}: ${snapshot.error}'));
           }
 
           final allNotifications = snapshot.data ?? [];
@@ -170,11 +172,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Row(
                   children: [
-                    _buildFilterChip('All'),
+                    _buildFilterChip(l10n.notificationsFilterAll, 'All'),
                     const SizedBox(width: 12),
-                    _buildFilterChip('Unread'),
+                    _buildFilterChip(l10n.notificationsFilterUnread, 'Unread'),
                     const SizedBox(width: 12),
-                    _buildFilterChip('Order'),
+                    _buildFilterChip(l10n.notificationsFilterOrder, 'Order'),
                   ],
                 ),
               ),
@@ -188,7 +190,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             Icon(Icons.notifications_none_rounded, size: 64, color: Colors.grey[300]),
                             const SizedBox(height: 16),
                             Text(
-                              'No ${_selectedFilter.toLowerCase()} notifications',
+                              l10n.notificationsNoFilterNotifications(_selectedFilter.toLowerCase()),
                               style: const TextStyle(color: Color(0xFF888888)),
                             ),
                           ],
@@ -207,7 +209,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           return _buildNotificationCard(
                             id: n['id'].toString(),
                             icon: _getIconForType(n['type']),
-                            title: n['title'] ?? 'Notification',
+                            title: n['title'] ?? AppLocalizations.of(context)!.notificationsDefaultTitle,
                             // 'message' is new column; fall back to 'body' for old rows
                             description: n['message'] ?? n['body'] ?? '',
                             time: _timeAgo(createdAt),
@@ -242,10 +244,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return DateFormat('MMM d').format(dt);
   }
 
-  Widget _buildFilterChip(String label) {
-    bool isSelected = _selectedFilter == label;
+  Widget _buildFilterChip(String label, String value) {
+    bool isSelected = _selectedFilter == value;
     return GestureDetector(
-      onTap: () => setState(() => _selectedFilter = label),
+      onTap: () => setState(() => _selectedFilter = value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(

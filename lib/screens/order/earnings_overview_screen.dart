@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'earnings_history_screen.dart';
@@ -160,9 +161,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
             ),
           ),
         ),
-        title: const Text(
-          'Earnings Overview',
-          style: TextStyle(
+        title: Text(
+          AppLocalizations.of(context)!.earningsOverviewTitle,
+          style: const TextStyle(
             color: Color(0xFF1F1F1F),
             fontSize: 16,
             fontWeight: FontWeight.w800,
@@ -173,11 +174,12 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _ordersFuture,
         builder: (context, snapshot) {
+          final l10n = AppLocalizations.of(context)!;
           if (snapshot.connectionState == ConnectionState.waiting) {
              return const Center(child: CircularProgressIndicator(color: Color(0xFFFF4D00)));
           }
           if (snapshot.hasError) {
-             return Center(child: Text('Error: ${snapshot.error}'));
+             return Center(child: Text('${l10n.common_error}: ${snapshot.error}'));
           }
 
           // Double filter: Supabase stream already filters by driver_id,
@@ -300,9 +302,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                               children: [
                                 Column(
                                   children: [
-                                    const Text(
-                                      'WALLET BALANCE',
-                                      style: TextStyle(
+                                    Text(
+                                      l10n.earningsWalletBalance,
+                                      style: const TextStyle(
                                         fontSize: 10,
                                         color: Color(0xFF888888),
                                         fontWeight: FontWeight.w700,
@@ -323,9 +325,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                 Container(width: 1, height: 30, color: const Color(0xFFEEEEEE)),
                                 Column(
                                   children: [
-                                    const Text(
-                                      'TODAY',
-                                      style: TextStyle(
+                                    Text(
+                                      l10n.earningsTodayCaps,
+                                      style: const TextStyle(
                                         fontSize: 10,
                                         color: Color(0xFFFF4D00),
                                         fontWeight: FontWeight.w700,
@@ -364,12 +366,12 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                children: const [
-                                  Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100)),
-                                  SizedBox(width: 10),
+                                children: [
+                                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100)),
+                                  const SizedBox(width: 10),
                                   Text(
-                                    'Action Required',
-                                    style: TextStyle(
+                                    l10n.earningsActionRequired,
+                                    style: const TextStyle(
                                       color: Color(0xFFE65100),
                                       fontWeight: FontWeight.w800,
                                       fontSize: 14,
@@ -378,9 +380,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                 ],
                               ),
                               const SizedBox(height: 10),
-                              const Text(
-                                'Please link your bank account via Stripe to enable payouts.',
-                                style: TextStyle(
+                              Text(
+                                l10n.earningsStripeLinkBankDesc,
+                                style: const TextStyle(
                                   color: Color(0xFF5D4037),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
@@ -400,9 +402,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                     ),
                                     elevation: 0,
                                   ),
-                                  child: const Text(
-                                    'Link Bank Account',
-                                    style: TextStyle(fontWeight: FontWeight.w700),
+                                  child: Text(
+                                    l10n.earningsLinkBankAccount,
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
                                   ),
                                 ),
                               ),
@@ -435,9 +437,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'WEEKLY PERFORMANCE',
-                                      style: TextStyle(
+                                    Text(
+                                      l10n.earningsWeeklyPerformance,
+                                      style: const TextStyle(
                                         fontSize: 11,
                                         color: Color(0xFF888888),
                                         fontWeight: FontWeight.w700,
@@ -464,16 +466,16 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
-                                    children: const [
-                                      Icon(
+                                    children: [
+                                      const Icon(
                                         Icons.calendar_today,
                                         size: 14,
                                         color: Color(0xFF666666),
                                       ),
-                                      SizedBox(width: 6),
+                                      const SizedBox(width: 6),
                                       Text(
-                                        'This week',
-                                        style: TextStyle(
+                                        l10n.earningsThisWeek,
+                                        style: const TextStyle(
                                           fontSize: 11,
                                           color: Color(0xFF666666),
                                           fontWeight: FontWeight.w700,
@@ -518,12 +520,12 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'TOTAL DELIVERIES',
-                              style: TextStyle(
+                            Text(
+                              l10n.earningsTotalDeliveriesCaps,
+                              style: const TextStyle(
                                 fontSize: 11,
                                 color: Color(0xFF888888),
-                                fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -543,9 +545,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Recent Deliveries',
-                            style: TextStyle(
+                          Text(
+                            l10n.earningsRecentDeliveries,
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                               color: Color(0xFF1F1F1F),
@@ -560,9 +562,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                 ),
                               );
                             },
-                            child: const Text(
-                              'See all',
-                              style: TextStyle(
+                            child: Text(
+                              l10n.earningsSeeAll,
+                              style: const TextStyle(
                                 fontSize: 13,
                                 color: Color(0xFF888888),
                                 fontWeight: FontWeight.w600,
@@ -574,9 +576,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                       const SizedBox(height: 8),
 
                       if (recentOrders.isEmpty)
-                        const Padding(
-                           padding: EdgeInsets.all(20),
-                           child: Center(child: Text("No deliveries today yet.", style: TextStyle(color: Colors.grey))),
+                        Padding(
+                           padding: const EdgeInsets.all(20),
+                           child: Center(child: Text(l10n.earningsNoDeliveriesToday, style: const TextStyle(color: Colors.grey))),
                         ),
 
                       ...recentOrders.map((o) => _buildDeliveryItem(o)),
@@ -612,9 +614,9 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Cash Out Now',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    child: Text(
+                      l10n.earningsCashOutNow,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -819,19 +821,20 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final l10n = AppLocalizations.of(context)!;
           return AlertDialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text(
-              'Cash Out',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20),
+            title: Text(
+              l10n.earningsCashOut,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Available: \$${_walletBalance.toStringAsFixed(2)}',
+                  l10n.earningsAvailableAmount('\$${_walletBalance.toStringAsFixed(2)}'),
                   style: const TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 20),
@@ -840,7 +843,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
                   decoration: InputDecoration(
-                    hintText: 'Enter amount',
+                    hintText: l10n.earningsAmountHint,
                     prefixText: '\$ ',
                     filled: true,
                     fillColor: const Color(0xFFFBFBFB),
@@ -855,7 +858,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
             actions: [
               TextButton(
                 onPressed: isProcessing ? null : () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w700)),
+                child: Text(l10n.common_cancel, style: const TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 8),
               SizedBox(
@@ -864,11 +867,11 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                   onPressed: isProcessing ? null : () async {
                     final amount = double.tryParse(amountController.text) ?? 0.0;
                     if (amount <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid amount')));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.earningsEnterValidAmount)));
                       return;
                     }
                     if (amount > _walletBalance) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Insufficient balance')));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.earningsInsufficientBalance)));
                       return;
                     }
 
@@ -881,7 +884,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                     
                     String displayMsg = result['message'];
                     if (displayMsg.contains('Insufficient balance')) {
-                      displayMsg = 'Stripe Error: Insufficient available funds in your account.';
+                      displayMsg = l10n.earningsStripeErrorInsufficient;
                     }
                     
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -902,7 +905,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                   ),
                   child: isProcessing 
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Confirm', style: TextStyle(fontWeight: FontWeight.w700)),
+                    : Text(l10n.earningsConfirm, style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -913,6 +916,7 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
   }
 
   Future<void> _startStripeOnboarding() async {
+    final l10n = AppLocalizations.of(context)!;
     final result = await WalletService.getStripeOnboardingUrlWithResult();
     if (!mounted) return;
     
@@ -922,13 +926,13 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open onboarding link.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.earningsOnboardingLinkError)));
       }
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${result['error'] ?? 'Generating onboarding link failed.'}'),
+          content: Text('${l10n.earningsGeneratingLinkFailed} ${result['error'] ?? ''}'),
           backgroundColor: Colors.red,
         )
       );

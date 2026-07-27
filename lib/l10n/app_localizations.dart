@@ -1448,6 +1448,48 @@ abstract class AppLocalizations {
   /// **'No messages yet. Start the conversation!'**
   String get chatNoMessages;
 
+  /// No description provided for @chatSendError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to send: {error}'**
+  String chatSendError(String error);
+
+  /// No description provided for @chatError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String chatError(String error);
+
+  /// No description provided for @chatToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get chatToday;
+
+  /// No description provided for @chatYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get chatYesterday;
+
+  /// No description provided for @chatCustomer.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer'**
+  String get chatCustomer;
+
+  /// No description provided for @chatNoMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No messages yet'**
+  String get chatNoMessagesTitle;
+
+  /// No description provided for @chatNoMessagesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Start the conversation below'**
+  String get chatNoMessagesSubtitle;
+
   /// No description provided for @notificationsTitle.
   ///
   /// In en, this message translates to:
@@ -1457,7 +1499,7 @@ abstract class AppLocalizations {
   /// No description provided for @notificationsEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No notifications yet'**
+  /// **'No notifications yet.'**
   String get notificationsEmpty;
 
   /// No description provided for @notificationsEmptyDesc.
@@ -1531,6 +1573,690 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rating'**
   String get earningsRating;
+
+  /// No description provided for @assignedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned Orders'**
+  String get assignedTitle;
+
+  /// No description provided for @assignedTabAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Available'**
+  String get assignedTabAvailable;
+
+  /// No description provided for @assignedTabAssigned.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned'**
+  String get assignedTabAssigned;
+
+  /// No description provided for @assignedTabScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get assignedTabScheduled;
+
+  /// No description provided for @assignedTabEmergency.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency'**
+  String get assignedTabEmergency;
+
+  /// No description provided for @assignedTabDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivered'**
+  String get assignedTabDelivered;
+
+  /// No description provided for @assignedOrderAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Order accepted! Tap it to start delivery.'**
+  String get assignedOrderAccepted;
+
+  /// No description provided for @assignedFailedLoad.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load orders'**
+  String get assignedFailedLoad;
+
+  /// No description provided for @assignedGoOnlineDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Go online from the Dashboard to see available orders.'**
+  String get assignedGoOnlineDesc;
+
+  /// No description provided for @assignedNoNearby.
+  ///
+  /// In en, this message translates to:
+  /// **'No nearby orders found'**
+  String get assignedNoNearby;
+
+  /// No description provided for @assignedNoAssignedOrders.
+  ///
+  /// In en, this message translates to:
+  /// **'No assigned orders yet.'**
+  String get assignedNoAssignedOrders;
+
+  /// No description provided for @assignedNoScheduledOrders.
+  ///
+  /// In en, this message translates to:
+  /// **'No scheduled orders yet.'**
+  String get assignedNoScheduledOrders;
+
+  /// No description provided for @assignedNoEmergencyOrders.
+  ///
+  /// In en, this message translates to:
+  /// **'No emergency orders yet.'**
+  String get assignedNoEmergencyOrders;
+
+  /// No description provided for @assignedNoDeliveredOrders.
+  ///
+  /// In en, this message translates to:
+  /// **'No delivered orders yet.'**
+  String get assignedNoDeliveredOrders;
+
+  /// No description provided for @assignedWaitingGps.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for GPS location…'**
+  String get assignedWaitingGps;
+
+  /// No description provided for @assignedShowingNearbyFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing orders within 25 km of your location (fallback).'**
+  String get assignedShowingNearbyFallback;
+
+  /// No description provided for @assignedShowingNearbyConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing orders within {count} configured service area(s).'**
+  String assignedShowingNearbyConfigured(int count);
+
+  /// No description provided for @assignedSchedTime.
+  ///
+  /// In en, this message translates to:
+  /// **'SCHED: {time}'**
+  String assignedSchedTime(String time);
+
+  /// No description provided for @assignedSched.
+  ///
+  /// In en, this message translates to:
+  /// **'SCHED'**
+  String get assignedSched;
+
+  /// No description provided for @assignedNew.
+  ///
+  /// In en, this message translates to:
+  /// **'NEW'**
+  String get assignedNew;
+
+  /// No description provided for @assignedFuelTypeFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} Gal {type}'**
+  String assignedFuelTypeFormat(String qty, String type);
+
+  /// No description provided for @assignedTagAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'AVAILABLE'**
+  String get assignedTagAvailable;
+
+  /// No description provided for @assignedTagEmergency.
+  ///
+  /// In en, this message translates to:
+  /// **'EMERGENCY'**
+  String get assignedTagEmergency;
+
+  /// No description provided for @assignedTagAssigned.
+  ///
+  /// In en, this message translates to:
+  /// **'ASSIGNED'**
+  String get assignedTagAssigned;
+
+  /// No description provided for @assignedTagDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'DELIVERED'**
+  String get assignedTagDelivered;
+
+  /// No description provided for @assignedTagCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'COMPLETED'**
+  String get assignedTagCompleted;
+
+  /// No description provided for @assignedFuelType.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Type'**
+  String get assignedFuelType;
+
+  /// No description provided for @assignedGo.
+  ///
+  /// In en, this message translates to:
+  /// **'GO'**
+  String get assignedGo;
+
+  /// No description provided for @assignedDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get assignedDetails;
+
+  /// No description provided for @navGpsDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS is Disabled'**
+  String get navGpsDisabled;
+
+  /// No description provided for @navGpsDisabledDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Please turn on Location Services in your device settings.'**
+  String get navGpsDisabledDesc;
+
+  /// No description provided for @navPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Location Permission Denied'**
+  String get navPermissionDenied;
+
+  /// No description provided for @navPermissionDeniedDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'FuelDirect needs location access to navigate.'**
+  String get navPermissionDeniedDesc;
+
+  /// No description provided for @navOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings'**
+  String get navOpenSettings;
+
+  /// No description provided for @navCalculating.
+  ///
+  /// In en, this message translates to:
+  /// **'Calc...'**
+  String get navCalculating;
+
+  /// No description provided for @navMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min'**
+  String navMinutes(String minutes);
+
+  /// No description provided for @navMiles.
+  ///
+  /// In en, this message translates to:
+  /// **'{miles} mi'**
+  String navMiles(String miles);
+
+  /// No description provided for @common_na.
+  ///
+  /// In en, this message translates to:
+  /// **'N/A'**
+  String get common_na;
+
+  /// No description provided for @navCustomerNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'CUSTOMER NOTES'**
+  String get navCustomerNotes;
+
+  /// No description provided for @navNoInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'No special instructions provided.'**
+  String get navNoInstructions;
+
+  /// No description provided for @navArrivedAtSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrived at Source'**
+  String get navArrivedAtSource;
+
+  /// No description provided for @navReleaseOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Release Order'**
+  String get navReleaseOrder;
+
+  /// No description provided for @navReleasing.
+  ///
+  /// In en, this message translates to:
+  /// **'Releasing…'**
+  String get navReleasing;
+
+  /// No description provided for @navReleasePromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Release Order?'**
+  String get navReleasePromptTitle;
+
+  /// No description provided for @navReleasePromptDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to release this order?\n\nIt will be returned to the available pool and reassigned to another driver.'**
+  String get navReleasePromptDesc;
+
+  /// No description provided for @navRelease.
+  ///
+  /// In en, this message translates to:
+  /// **'Release'**
+  String get navRelease;
+
+  /// No description provided for @navReleaseSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Order released. It will be reassigned.'**
+  String get navReleaseSuccess;
+
+  /// No description provided for @navReleaseFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to release order: {error}'**
+  String navReleaseFailed(String error);
+
+  /// No description provided for @common_goBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go Back'**
+  String get common_goBack;
+
+  /// No description provided for @proofPhotoUploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo uploaded successfully ✅'**
+  String get proofPhotoUploaded;
+
+  /// No description provided for @proofUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed: {error}'**
+  String proofUploadFailed(String error);
+
+  /// No description provided for @proofTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Proof'**
+  String get proofTitle;
+
+  /// No description provided for @proofDispensingComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Dispensing Complete'**
+  String get proofDispensingComplete;
+
+  /// No description provided for @proofDispensingCompleteDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture the fuel meter and enter the delivered gallons to complete the order.'**
+  String get proofDispensingCompleteDesc;
+
+  /// No description provided for @proofMeterGaugePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'METER GAUGE PHOTO'**
+  String get proofMeterGaugePhoto;
+
+  /// No description provided for @proofRetakePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Retake Photo'**
+  String get proofRetakePhoto;
+
+  /// No description provided for @proofManualEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'MANUAL ENTRY'**
+  String get proofManualEntry;
+
+  /// No description provided for @proofGallons.
+  ///
+  /// In en, this message translates to:
+  /// **'GALLONS'**
+  String get proofGallons;
+
+  /// No description provided for @proofEstimatedTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Total'**
+  String get proofEstimatedTotal;
+
+  /// No description provided for @proofPricePerGal.
+  ///
+  /// In en, this message translates to:
+  /// **'at {price} / gal'**
+  String proofPricePerGal(String price);
+
+  /// No description provided for @proofMeterPhotoUploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Meter photo uploaded'**
+  String get proofMeterPhotoUploaded;
+
+  /// No description provided for @proofUploadingPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading photo…'**
+  String get proofUploadingPhoto;
+
+  /// No description provided for @proofTakeMeterPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Take meter gauge photo (required)'**
+  String get proofTakeMeterPhoto;
+
+  /// No description provided for @proofGallonsEntered.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallons entered: {qty}'**
+  String proofGallonsEntered(String qty);
+
+  /// No description provided for @proofEnterGallons.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter delivered gallons (required)'**
+  String get proofEnterGallons;
+
+  /// No description provided for @proofSupervisorReviewDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual entries are flagged for supervisor review. Ensure the photo clearly shows the meter digits matching the entered quantity.'**
+  String get proofSupervisorReviewDesc;
+
+  /// No description provided for @proofWaitUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait for the photo to finish uploading.'**
+  String get proofWaitUpload;
+
+  /// No description provided for @proofTakePhotoFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Please take a photo of the fuel meter first.'**
+  String get proofTakePhotoFirst;
+
+  /// No description provided for @proofEnterGallonsFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter the delivered gallons.'**
+  String get proofEnterGallonsFirst;
+
+  /// No description provided for @proofCompleteOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete Order'**
+  String get proofCompleteOrder;
+
+  /// No description provided for @proofWaitingImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for image...'**
+  String get proofWaitingImage;
+
+  /// No description provided for @proofPhotoSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo Saved'**
+  String get proofPhotoSaved;
+
+  /// No description provided for @proofTapToTakePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to take meter photo'**
+  String get proofTapToTakePhoto;
+
+  /// No description provided for @proofDigitsVisible.
+  ///
+  /// In en, this message translates to:
+  /// **'Ensure the final digits are clearly visible'**
+  String get proofDigitsVisible;
+
+  /// No description provided for @proofCaptureFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture failed. Try again.'**
+  String get proofCaptureFailed;
+
+  /// No description provided for @proofDebugCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'DEBUG CAMERA'**
+  String get proofDebugCamera;
+
+  /// No description provided for @historyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery History'**
+  String get historyTitle;
+
+  /// No description provided for @historyNoDeliveries.
+  ///
+  /// In en, this message translates to:
+  /// **'No completed deliveries yet.'**
+  String get historyNoDeliveries;
+
+  /// No description provided for @historyCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get historyCompleted;
+
+  /// No description provided for @historyError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String historyError(String error);
+
+  /// No description provided for @historyFuelQty.
+  ///
+  /// In en, this message translates to:
+  /// **'{fuelType} ({qty} Gal)'**
+  String historyFuelQty(String fuelType, String qty);
+
+  /// No description provided for @earningsYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get earningsYesterday;
+
+  /// No description provided for @monthJan.
+  ///
+  /// In en, this message translates to:
+  /// **'Jan'**
+  String get monthJan;
+
+  /// No description provided for @monthFeb.
+  ///
+  /// In en, this message translates to:
+  /// **'Feb'**
+  String get monthFeb;
+
+  /// No description provided for @monthMar.
+  ///
+  /// In en, this message translates to:
+  /// **'Mar'**
+  String get monthMar;
+
+  /// No description provided for @monthApr.
+  ///
+  /// In en, this message translates to:
+  /// **'Apr'**
+  String get monthApr;
+
+  /// No description provided for @monthMay.
+  ///
+  /// In en, this message translates to:
+  /// **'May'**
+  String get monthMay;
+
+  /// No description provided for @monthJun.
+  ///
+  /// In en, this message translates to:
+  /// **'Jun'**
+  String get monthJun;
+
+  /// No description provided for @monthJul.
+  ///
+  /// In en, this message translates to:
+  /// **'Jul'**
+  String get monthJul;
+
+  /// No description provided for @monthAug.
+  ///
+  /// In en, this message translates to:
+  /// **'Aug'**
+  String get monthAug;
+
+  /// No description provided for @monthSep.
+  ///
+  /// In en, this message translates to:
+  /// **'Sep'**
+  String get monthSep;
+
+  /// No description provided for @monthOct.
+  ///
+  /// In en, this message translates to:
+  /// **'Oct'**
+  String get monthOct;
+
+  /// No description provided for @monthNov.
+  ///
+  /// In en, this message translates to:
+  /// **'Nov'**
+  String get monthNov;
+
+  /// No description provided for @monthDec.
+  ///
+  /// In en, this message translates to:
+  /// **'Dec'**
+  String get monthDec;
+
+  /// No description provided for @pickupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Pickup'**
+  String get pickupTitle;
+
+  /// No description provided for @pickupDepotVerification.
+  ///
+  /// In en, this message translates to:
+  /// **'Depot Verification'**
+  String get pickupDepotVerification;
+
+  /// No description provided for @pickupInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In Progress'**
+  String get pickupInProgress;
+
+  /// No description provided for @pickupArrivedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrived at Source: {time}'**
+  String pickupArrivedAt(String time);
+
+  /// No description provided for @pickupOrderDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'ORDER DETAILS'**
+  String get pickupOrderDetails;
+
+  /// No description provided for @pickupOrderNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Order #{id}'**
+  String pickupOrderNumber(String id);
+
+  /// No description provided for @pickupNoAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery address not available'**
+  String get pickupNoAddress;
+
+  /// No description provided for @pickupGeofenceConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'GEOFENCE CONFIRMED'**
+  String get pickupGeofenceConfirmed;
+
+  /// No description provided for @pickupSealTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tank Seal Check Number'**
+  String get pickupSealTitle;
+
+  /// No description provided for @pickupSealHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter numbers only — no letters or special characters.'**
+  String get pickupSealHint;
+
+  /// No description provided for @pickupSealEg.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 12345678'**
+  String get pickupSealEg;
+
+  /// No description provided for @pickupSealVerificationNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification ensures the integrity of the fuel cargo during transport.'**
+  String get pickupSealVerificationNote;
+
+  /// No description provided for @pickupFuelType.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Type'**
+  String get pickupFuelType;
+
+  /// No description provided for @pickupExpectedVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected Volume'**
+  String get pickupExpectedVolume;
+
+  /// No description provided for @pickupTolerance.
+  ///
+  /// In en, this message translates to:
+  /// **'TOLERANCE: ±0.5%'**
+  String get pickupTolerance;
+
+  /// No description provided for @pickupVolumeGal.
+  ///
+  /// In en, this message translates to:
+  /// **'{volume} GAL'**
+  String pickupVolumeGal(String volume);
+
+  /// No description provided for @pickupConfirmNote.
+  ///
+  /// In en, this message translates to:
+  /// **'By clicking confirm, you verify that you have inspected the safety valves and recorded the correct volume.'**
+  String get pickupConfirmNote;
+
+  /// No description provided for @pickupConfirmStartTrip.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm & Start Trip'**
+  String get pickupConfirmStartTrip;
+
+  /// No description provided for @pickupEnterSeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter the tank seal number'**
+  String get pickupEnterSeal;
+
+  /// No description provided for @pickupSealMinLength.
+  ///
+  /// In en, this message translates to:
+  /// **'Seal number must be at least 4 digits'**
+  String get pickupSealMinLength;
 
   /// No description provided for @common_cancel.
   ///
@@ -1621,6 +2347,1146 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done'**
   String get common_done;
+
+  /// No description provided for @rtdLocating.
+  ///
+  /// In en, this message translates to:
+  /// **'Locating delivery address…'**
+  String get rtdLocating;
+
+  /// No description provided for @rtdDestMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery location not available'**
+  String get rtdDestMissing;
+
+  /// No description provided for @rtdAddressLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Address: {address}'**
+  String rtdAddressLabel(String address);
+
+  /// No description provided for @rtdNoAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'No address on record for this order.'**
+  String get rtdNoAddress;
+
+  /// No description provided for @rtdRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get rtdRetry;
+
+  /// No description provided for @rtdDeliveringTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivering to'**
+  String get rtdDeliveringTo;
+
+  /// No description provided for @rtdEtaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'ETA'**
+  String get rtdEtaLabel;
+
+  /// No description provided for @rtdTimeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TIME'**
+  String get rtdTimeLabel;
+
+  /// No description provided for @rtdDistLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'DIST'**
+  String get rtdDistLabel;
+
+  /// No description provided for @rtdMin.
+  ///
+  /// In en, this message translates to:
+  /// **'{mins} min'**
+  String rtdMin(String mins);
+
+  /// No description provided for @rtdMiles.
+  ///
+  /// In en, this message translates to:
+  /// **'{dist} miles'**
+  String rtdMiles(String dist);
+
+  /// No description provided for @rtdCustomerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer'**
+  String get rtdCustomerLabel;
+
+  /// No description provided for @rtdArrivedConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrived! Confirm Arrival'**
+  String get rtdArrivedConfirm;
+
+  /// No description provided for @rtdArrivedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Arrived at Customer'**
+  String get rtdArrivedAt;
+
+  /// No description provided for @rtdNoPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'No phone number available.'**
+  String get rtdNoPhone;
+
+  /// No description provided for @rtdCallError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch phone dialer. Please check permissions.'**
+  String get rtdCallError;
+
+  /// No description provided for @rtdArrivalFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update arrival: {error}'**
+  String rtdArrivalFailed(String error);
+
+  /// No description provided for @rtdGpsDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS is disabled'**
+  String get rtdGpsDisabled;
+
+  /// No description provided for @rtdGpsDisabledDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Please turn on Location Services in your device settings.'**
+  String get rtdGpsDisabledDesc;
+
+  /// No description provided for @rtdOpenGps.
+  ///
+  /// In en, this message translates to:
+  /// **'Open GPS Settings'**
+  String get rtdOpenGps;
+
+  /// No description provided for @rtdPermDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Location Permission Denied'**
+  String get rtdPermDenied;
+
+  /// No description provided for @rtdPermDeniedDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'FuelDirect needs location access to navigate. Tap below to open Settings.'**
+  String get rtdPermDeniedDesc;
+
+  /// No description provided for @rtdOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings'**
+  String get rtdOpenSettings;
+
+  /// No description provided for @rtdGoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go Back'**
+  String get rtdGoBack;
+
+  /// No description provided for @orderSummaryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Order Summary'**
+  String get orderSummaryTitle;
+
+  /// No description provided for @orderSummaryDeliveryDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'DELIVERY DETAILS'**
+  String get orderSummaryDeliveryDetails;
+
+  /// No description provided for @orderSummaryOrderId.
+  ///
+  /// In en, this message translates to:
+  /// **'Order ID'**
+  String get orderSummaryOrderId;
+
+  /// No description provided for @orderSummaryFuelType.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Type'**
+  String get orderSummaryFuelType;
+
+  /// No description provided for @orderSummaryQuantity.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantity'**
+  String get orderSummaryQuantity;
+
+  /// No description provided for @orderSummaryQuantityVal.
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} gallons'**
+  String orderSummaryQuantityVal(String qty);
+
+  /// No description provided for @orderSummaryDeliveryAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Address'**
+  String get orderSummaryDeliveryAddress;
+
+  /// No description provided for @orderSummaryScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get orderSummaryScheduled;
+
+  /// No description provided for @orderSummaryPricingBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'PRICING BREAKDOWN'**
+  String get orderSummaryPricingBreakdown;
+
+  /// No description provided for @orderSummaryFuelCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Cost'**
+  String get orderSummaryFuelCost;
+
+  /// No description provided for @orderSummaryDeliveryFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Fee'**
+  String get orderSummaryDeliveryFee;
+
+  /// No description provided for @orderSummaryServiceFee.
+  ///
+  /// In en, this message translates to:
+  /// **'Service Fee'**
+  String get orderSummaryServiceFee;
+
+  /// No description provided for @orderSummaryTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get orderSummaryTotal;
+
+  /// No description provided for @orderSummaryStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'STATUS'**
+  String get orderSummaryStatus;
+
+  /// No description provided for @orderSummaryCurrentStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Status'**
+  String get orderSummaryCurrentStatus;
+
+  /// No description provided for @orderSummaryPaymentMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Method'**
+  String get orderSummaryPaymentMethod;
+
+  /// No description provided for @orderSummarySpecialInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'SPECIAL INSTRUCTIONS'**
+  String get orderSummarySpecialInstructions;
+
+  /// No description provided for @orderSummaryNoInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'No special instructions provided.'**
+  String get orderSummaryNoInstructions;
+
+  /// No description provided for @orderSummaryUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'N/A'**
+  String get orderSummaryUnavailable;
+
+  /// No description provided for @orderSummaryNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get orderSummaryNotSet;
+
+  /// No description provided for @orderSummaryFuelDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Details'**
+  String get orderSummaryFuelDetails;
+
+  /// No description provided for @orderSummaryPricePerGallon.
+  ///
+  /// In en, this message translates to:
+  /// **'Price per Gallon'**
+  String get orderSummaryPricePerGallon;
+
+  /// No description provided for @orderSummaryPriceVal.
+  ///
+  /// In en, this message translates to:
+  /// **'{price}'**
+  String orderSummaryPriceVal(String price);
+
+  /// No description provided for @orderSummaryFuelTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Total'**
+  String get orderSummaryFuelTotal;
+
+  /// No description provided for @orderSummaryFuelTotalVal.
+  ///
+  /// In en, this message translates to:
+  /// **'{total}'**
+  String orderSummaryFuelTotalVal(String total);
+
+  /// No description provided for @orderSummaryVehicle.
+  ///
+  /// In en, this message translates to:
+  /// **'Vehicle'**
+  String get orderSummaryVehicle;
+
+  /// No description provided for @orderSummaryAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get orderSummaryAddress;
+
+  /// No description provided for @orderSummaryScheduledTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled Time'**
+  String get orderSummaryScheduledTime;
+
+  /// No description provided for @orderSummaryNotScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Scheduled'**
+  String get orderSummaryNotScheduled;
+
+  /// No description provided for @orderSummaryPaymentSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Summary'**
+  String get orderSummaryPaymentSummary;
+
+  /// No description provided for @orderSummaryTotalDueToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Due Today'**
+  String get orderSummaryTotalDueToday;
+
+  /// No description provided for @orderSummaryDefaultPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Default payment'**
+  String get orderSummaryDefaultPayment;
+
+  /// No description provided for @orderSummaryChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get orderSummaryChange;
+
+  /// No description provided for @orderSummaryLoginRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please log in to place an order'**
+  String get orderSummaryLoginRequired;
+
+  /// No description provided for @orderSummaryPlaceError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error placing order: {error}'**
+  String orderSummaryPlaceError(String error);
+
+  /// No description provided for @orderSummaryPlaceOrderButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Place Order - {total}'**
+  String orderSummaryPlaceOrderButton(String total);
+
+  /// No description provided for @orderSummaryRegular.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular'**
+  String get orderSummaryRegular;
+
+  /// No description provided for @orderSummaryPlaceholderVehicle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tesla Model 3'**
+  String get orderSummaryPlaceholderVehicle;
+
+  /// No description provided for @orderSummaryPlaceholderVehicleSub.
+  ///
+  /// In en, this message translates to:
+  /// **'ABC 1234'**
+  String get orderSummaryPlaceholderVehicleSub;
+
+  /// No description provided for @orderSummaryPlaceholderAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get orderSummaryPlaceholderAddress;
+
+  /// No description provided for @orderSummaryPlaceholderAddressSub.
+  ///
+  /// In en, this message translates to:
+  /// **'123 Main Street, San Francisco, CA 94102'**
+  String get orderSummaryPlaceholderAddressSub;
+
+  /// No description provided for @orderHistoryNoOrders.
+  ///
+  /// In en, this message translates to:
+  /// **'No completed orders found.'**
+  String get orderHistoryNoOrders;
+
+  /// No description provided for @orderHistoryError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading history: {error}'**
+  String orderHistoryError(String error);
+
+  /// No description provided for @orderHistoryLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading...'**
+  String get orderHistoryLoading;
+
+  /// No description provided for @orderHistorySearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by location...'**
+  String get orderHistorySearchHint;
+
+  /// No description provided for @orderHistoryPlaceholderFuel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel'**
+  String get orderHistoryPlaceholderFuel;
+
+  /// No description provided for @orderHistoryCardQty.
+  ///
+  /// In en, this message translates to:
+  /// **'{fuelType} • {qty} Gal'**
+  String orderHistoryCardQty(String fuelType, String qty);
+
+  /// No description provided for @orderDetailsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Order Details'**
+  String get orderDetailsTitle;
+
+  /// No description provided for @orderDetailsOrderNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Order #{id}'**
+  String orderDetailsOrderNumber(String id);
+
+  /// No description provided for @orderDetailsStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get orderDetailsStatus;
+
+  /// No description provided for @orderDetailsFuelType.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Type'**
+  String get orderDetailsFuelType;
+
+  /// No description provided for @orderDetailsQuantity.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantity'**
+  String get orderDetailsQuantity;
+
+  /// No description provided for @orderDetailsAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Address'**
+  String get orderDetailsAddress;
+
+  /// No description provided for @orderDetailsTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get orderDetailsTotal;
+
+  /// No description provided for @orderDetailsScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get orderDetailsScheduled;
+
+  /// No description provided for @orderDetailsPaymentMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Method'**
+  String get orderDetailsPaymentMethod;
+
+  /// No description provided for @orderDetailsCustomer.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer'**
+  String get orderDetailsCustomer;
+
+  /// No description provided for @orderDetailsSpecialInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Special Instructions'**
+  String get orderDetailsSpecialInstructions;
+
+  /// No description provided for @orderDetailsNoInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get orderDetailsNoInstructions;
+
+  /// No description provided for @orderDetailsGallons.
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} Gal'**
+  String orderDetailsGallons(String qty);
+
+  /// No description provided for @orderDetailsNoContactInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'No contact info'**
+  String get orderDetailsNoContactInfo;
+
+  /// No description provided for @orderDetailsChatUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer information not available for chat.'**
+  String get orderDetailsChatUnavailable;
+
+  /// No description provided for @orderDetailsOrderTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'ORDER TOTAL'**
+  String get orderDetailsOrderTotal;
+
+  /// No description provided for @orderDetailsCompletedCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed ✓'**
+  String get orderDetailsCompletedCheck;
+
+  /// No description provided for @orderDetailsPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get orderDetailsPending;
+
+  /// No description provided for @orderDetailsScheduledDeliveryHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'SCHEDULED DELIVERY'**
+  String get orderDetailsScheduledDeliveryHeader;
+
+  /// No description provided for @orderDetailsCustomerNotesHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'CUSTOMER NOTES'**
+  String get orderDetailsCustomerNotesHeader;
+
+  /// No description provided for @orderDetailsNoInstructionsDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'No special instructions provided.'**
+  String get orderDetailsNoInstructionsDesc;
+
+  /// No description provided for @orderDetailsDeliveryLocationHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'DELIVERY LOCATION'**
+  String get orderDetailsDeliveryLocationHeader;
+
+  /// No description provided for @orderDetailsNavigate.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigate'**
+  String get orderDetailsNavigate;
+
+  /// No description provided for @orderDetailsOrderTimelineHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'ORDER TIMELINE'**
+  String get orderDetailsOrderTimelineHeader;
+
+  /// No description provided for @orderDetailsTimelinePlaced.
+  ///
+  /// In en, this message translates to:
+  /// **'Order Placed'**
+  String get orderDetailsTimelinePlaced;
+
+  /// No description provided for @orderDetailsTimelineAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Order Accepted'**
+  String get orderDetailsTimelineAccepted;
+
+  /// No description provided for @orderDetailsTimelineArrived.
+  ///
+  /// In en, this message translates to:
+  /// **'Driver Arrived'**
+  String get orderDetailsTimelineArrived;
+
+  /// No description provided for @orderDetailsTimelineCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Order Completed'**
+  String get orderDetailsTimelineCompleted;
+
+  /// No description provided for @orderDetailsScheduledError.
+  ///
+  /// In en, this message translates to:
+  /// **'This order is scheduled for later. You can only start it 1 hour before the scheduled time.'**
+  String get orderDetailsScheduledError;
+
+  /// No description provided for @orderDetailsJourneyStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Journey Started! 🚀'**
+  String get orderDetailsJourneyStarted;
+
+  /// No description provided for @orderDetailsJourneyStartedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Heading to source location for pickup.'**
+  String get orderDetailsJourneyStartedBody;
+
+  /// No description provided for @orderDetailsStartJourney.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Delivery Journey'**
+  String get orderDetailsStartJourney;
+
+  /// No description provided for @orderDetailsEmergencyFlagged.
+  ///
+  /// In en, this message translates to:
+  /// **'Order flagged as Emergency! 🚨'**
+  String get orderDetailsEmergencyFlagged;
+
+  /// No description provided for @orderDetailsAssignedFlagged.
+  ///
+  /// In en, this message translates to:
+  /// **'Order moved back to Assigned.'**
+  String get orderDetailsAssignedFlagged;
+
+  /// No description provided for @orderDetailsEmergencyTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Flag as Emergency'**
+  String get orderDetailsEmergencyTooltip;
+
+  /// No description provided for @notificationsMarkRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all as read'**
+  String get notificationsMarkRead;
+
+  /// No description provided for @safetyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety Compliance'**
+  String get safetyTitle;
+
+  /// No description provided for @safetyCheckAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Check All Items'**
+  String get safetyCheckAll;
+
+  /// No description provided for @safetyConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Safety Check'**
+  String get safetyConfirm;
+
+  /// No description provided for @safetyItem1.
+  ///
+  /// In en, this message translates to:
+  /// **'Check fuel tank pressure'**
+  String get safetyItem1;
+
+  /// No description provided for @safetyItem2.
+  ///
+  /// In en, this message translates to:
+  /// **'Inspect hose connections'**
+  String get safetyItem2;
+
+  /// No description provided for @safetyItem3.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify fuel type matches order'**
+  String get safetyItem3;
+
+  /// No description provided for @safetyItem4.
+  ///
+  /// In en, this message translates to:
+  /// **'Check emergency shutoff valve'**
+  String get safetyItem4;
+
+  /// No description provided for @safetyItem5.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm PPE is on'**
+  String get safetyItem5;
+
+  /// No description provided for @safetyAllRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please complete all safety checks before confirming.'**
+  String get safetyAllRequired;
+
+  /// No description provided for @selectLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Location'**
+  String get selectLocationTitle;
+
+  /// No description provided for @selectLocationSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for a different location..'**
+  String get selectLocationSearchHint;
+
+  /// No description provided for @selectLocationCurrentSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'CURRENT SELECTION'**
+  String get selectLocationCurrentSelection;
+
+  /// No description provided for @selectLocationEstimatedWait.
+  ///
+  /// In en, this message translates to:
+  /// **'ESTIMATED WAIT'**
+  String get selectLocationEstimatedWait;
+
+  /// No description provided for @selectLocationServiceFee.
+  ///
+  /// In en, this message translates to:
+  /// **'SERVICE FEE'**
+  String get selectLocationServiceFee;
+
+  /// No description provided for @selectLocationConfirmOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Order'**
+  String get selectLocationConfirmOrder;
+
+  /// No description provided for @selectLocationPlaceholderAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'123 Innovation Drive'**
+  String get selectLocationPlaceholderAddress;
+
+  /// No description provided for @selectLocationPlaceholderCity.
+  ///
+  /// In en, this message translates to:
+  /// **'San Francisco, CA 94105'**
+  String get selectLocationPlaceholderCity;
+
+  /// No description provided for @selectLocationPlaceholderWait.
+  ///
+  /// In en, this message translates to:
+  /// **'15-20 mins'**
+  String get selectLocationPlaceholderWait;
+
+  /// No description provided for @selectLocationPlaceholderFee.
+  ///
+  /// In en, this message translates to:
+  /// **'\$4.99'**
+  String get selectLocationPlaceholderFee;
+
+  /// No description provided for @selectLocationPlaceholderFullAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'123 Innovation Drive, San Francisco, CA 94105'**
+  String get selectLocationPlaceholderFullAddress;
+
+  /// No description provided for @deliveryCompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Complete'**
+  String get deliveryCompleteTitle;
+
+  /// No description provided for @deliveryCompleteSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Order successfully delivered!'**
+  String get deliveryCompleteSubtitle;
+
+  /// No description provided for @deliveryCompleteBackHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get deliveryCompleteBackHome;
+
+  /// No description provided for @deliveryCompleteRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate this delivery'**
+  String get deliveryCompleteRating;
+
+  /// No description provided for @scheduleDeliveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule Delivery'**
+  String get scheduleDeliveryTitle;
+
+  /// No description provided for @scheduleDeliveryDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Date'**
+  String get scheduleDeliveryDate;
+
+  /// No description provided for @scheduleDeliveryTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Time'**
+  String get scheduleDeliveryTime;
+
+  /// No description provided for @scheduleDeliveryConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Schedule'**
+  String get scheduleDeliveryConfirm;
+
+  /// No description provided for @scheduleDeliveryNoSlots.
+  ///
+  /// In en, this message translates to:
+  /// **'No available time slots.'**
+  String get scheduleDeliveryNoSlots;
+
+  /// No description provided for @notificationsMarkAllReadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'All notifications marked as read'**
+  String get notificationsMarkAllReadSuccess;
+
+  /// No description provided for @notificationsFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get notificationsFilterAll;
+
+  /// No description provided for @notificationsFilterUnread.
+  ///
+  /// In en, this message translates to:
+  /// **'Unread'**
+  String get notificationsFilterUnread;
+
+  /// No description provided for @notificationsFilterOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Order'**
+  String get notificationsFilterOrder;
+
+  /// No description provided for @notificationsNoFilterNotifications.
+  ///
+  /// In en, this message translates to:
+  /// **'No {filter} notifications'**
+  String notificationsNoFilterNotifications(String filter);
+
+  /// No description provided for @notificationsDefaultTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification'**
+  String get notificationsDefaultTitle;
+
+  /// No description provided for @earningsOverviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Earnings Overview'**
+  String get earningsOverviewTitle;
+
+  /// No description provided for @earningsWalletBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'WALLET BALANCE'**
+  String get earningsWalletBalance;
+
+  /// No description provided for @earningsTodayCaps.
+  ///
+  /// In en, this message translates to:
+  /// **'TODAY'**
+  String get earningsTodayCaps;
+
+  /// No description provided for @earningsActionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Action Required'**
+  String get earningsActionRequired;
+
+  /// No description provided for @earningsStripeLinkBankDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Please link your bank account via Stripe to enable payouts.'**
+  String get earningsStripeLinkBankDesc;
+
+  /// No description provided for @earningsLinkBankAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Link Bank Account'**
+  String get earningsLinkBankAccount;
+
+  /// No description provided for @earningsWeeklyPerformance.
+  ///
+  /// In en, this message translates to:
+  /// **'WEEKLY PERFORMANCE'**
+  String get earningsWeeklyPerformance;
+
+  /// No description provided for @earningsThisWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get earningsThisWeek;
+
+  /// No description provided for @earningsTotalDeliveriesCaps.
+  ///
+  /// In en, this message translates to:
+  /// **'TOTAL DELIVERIES'**
+  String get earningsTotalDeliveriesCaps;
+
+  /// No description provided for @earningsRecentDeliveries.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Deliveries'**
+  String get earningsRecentDeliveries;
+
+  /// No description provided for @earningsSeeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'See all'**
+  String get earningsSeeAll;
+
+  /// No description provided for @earningsNoDeliveriesToday.
+  ///
+  /// In en, this message translates to:
+  /// **'No deliveries today yet.'**
+  String get earningsNoDeliveriesToday;
+
+  /// No description provided for @earningsCashOutNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash Out Now'**
+  String get earningsCashOutNow;
+
+  /// No description provided for @earningsCashOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash Out'**
+  String get earningsCashOut;
+
+  /// No description provided for @earningsAvailableAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Available: {amount}'**
+  String earningsAvailableAmount(String amount);
+
+  /// No description provided for @earningsAmountHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter amount'**
+  String get earningsAmountHint;
+
+  /// No description provided for @earningsConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get earningsConfirm;
+
+  /// No description provided for @earningsEnterValidAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid amount'**
+  String get earningsEnterValidAmount;
+
+  /// No description provided for @earningsInsufficientBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Insufficient balance'**
+  String get earningsInsufficientBalance;
+
+  /// No description provided for @earningsStripeErrorInsufficient.
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe Error: Insufficient available funds in your account.'**
+  String get earningsStripeErrorInsufficient;
+
+  /// No description provided for @earningsOnboardingLinkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open onboarding link.'**
+  String get earningsOnboardingLinkError;
+
+  /// No description provided for @earningsGeneratingLinkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating onboarding link failed.'**
+  String get earningsGeneratingLinkFailed;
+
+  /// No description provided for @fuelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel'**
+  String get fuelTitle;
+
+  /// No description provided for @fuelTypes.
+  ///
+  /// In en, this message translates to:
+  /// **'Fuel Types'**
+  String get fuelTypes;
+
+  /// No description provided for @fuelPetrol.
+  ///
+  /// In en, this message translates to:
+  /// **'Petrol'**
+  String get fuelPetrol;
+
+  /// No description provided for @fuelDiesel.
+  ///
+  /// In en, this message translates to:
+  /// **'Diesel'**
+  String get fuelDiesel;
+
+  /// No description provided for @fuelOctanePremium.
+  ///
+  /// In en, this message translates to:
+  /// **'Octane 95 Premium'**
+  String get fuelOctanePremium;
+
+  /// No description provided for @fuelUltraLowSulfur.
+  ///
+  /// In en, this message translates to:
+  /// **'Ultra-Low Sulfur'**
+  String get fuelUltraLowSulfur;
+
+  /// No description provided for @fuelQuantity.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantity'**
+  String get fuelQuantity;
+
+  /// No description provided for @fuelApproxRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Approx. range: 400 miles'**
+  String get fuelApproxRange;
+
+  /// No description provided for @fuelFullTank.
+  ///
+  /// In en, this message translates to:
+  /// **'Full Tank'**
+  String get fuelFullTank;
+
+  /// No description provided for @fuelConfirmOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Order'**
+  String get fuelConfirmOrder;
+
+  /// No description provided for @deliveryProofCameraError.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera error: {error}'**
+  String deliveryProofCameraError(String error);
+
+  /// No description provided for @deliveryProofInitError.
+  ///
+  /// In en, this message translates to:
+  /// **'Init error: {error}'**
+  String deliveryProofInitError(String error);
+
+  /// No description provided for @meterPreviewUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed: {error}'**
+  String meterPreviewUploadFailed(String error);
+
+  /// No description provided for @meterVerificationCameraError.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera error: {error}'**
+  String meterVerificationCameraError(String error);
+
+  /// No description provided for @meterVerificationCaptureFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to take photo. Please try again.'**
+  String get meterVerificationCaptureFailed;
+
+  /// No description provided for @orderDetailsError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String orderDetailsError(String error);
+
+  /// No description provided for @orderTrackingGoBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Go Back'**
+  String get orderTrackingGoBack;
+
+  /// No description provided for @paymentCouponHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Coupon Code'**
+  String get paymentCouponHint;
+
+  /// No description provided for @paymentAddNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Note'**
+  String get paymentAddNoteHint;
+
+  /// No description provided for @paymentButtonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get paymentButtonLabel;
+
+  /// No description provided for @paymentHaveCoupon.
+  ///
+  /// In en, this message translates to:
+  /// **'Have a Coupon?'**
+  String get paymentHaveCoupon;
+
+  /// No description provided for @rtdCustomer.
+  ///
+  /// In en, this message translates to:
+  /// **'Customer'**
+  String get rtdCustomer;
+
+  /// No description provided for @safetyNoPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'No phone number available.'**
+  String get safetyNoPhone;
+
+  /// No description provided for @safetyCallError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch phone dialer.'**
+  String get safetyCallError;
+
+  /// No description provided for @safetySaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get safetySaving;
+
+  /// No description provided for @safetyError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String safetyError(String error);
 }
 
 class _AppLocalizationsDelegate

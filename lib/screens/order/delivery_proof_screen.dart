@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'safety_compliance_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,10 +114,10 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
         _isUploading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Photo uploaded successfully ✅'),
-          backgroundColor: Color(0xFF4CAF50),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.proofPhotoUploaded),
+          backgroundColor: const Color(0xFF4CAF50),
+          duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
@@ -125,7 +126,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
       setState(() => _isUploading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Upload failed: ${e.toString().split(']').last}'),
+          content: Text(AppLocalizations.of(context)!.proofUploadFailed(e.toString().split(']').last)),
           backgroundColor: Colors.red,
         ),
       );
@@ -135,6 +136,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final l10n = AppLocalizations.of(context)!;
     final bool hasValue = (double.tryParse(_gallonsController.text) ?? 0.0) > 0;
     final bool photoReady = _meterPhotoUrl != null && !_isUploading;
     final bool canProceed = photoReady && hasValue;
@@ -165,9 +167,9 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
             ),
           ),
         ),
-        title: const Text(
-          'Delivery Proof',
-          style: TextStyle(
+        title: Text(
+          AppLocalizations.of(context)!.proofTitle,
+          style: const TextStyle(
               color: Color(0xFF1F1F1F),
               fontSize: 18,
               fontWeight: FontWeight.w800),
@@ -180,23 +182,23 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Dispensing Complete',
-                  style: TextStyle(
+              Text(l10n.proofDispensingComplete,
+                  style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF333333))),
               const SizedBox(height: 8),
-              const Text(
-                'Capture the fuel meter and enter the delivered gallons to complete the order.',
-                style: TextStyle(
+              Text(
+                l10n.proofDispensingCompleteDesc,
+                style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF888888),
                     height: 1.5,
                     fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 24),
-              const Text('METER GAUGE PHOTO',
-                  style: TextStyle(
+              Text(l10n.proofMeterGaugePhoto,
+                  style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF888888),
@@ -233,15 +235,15 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                   onPressed: _openCameraAndUpload,
                   icon: const Icon(Icons.refresh_rounded,
                       size: 16, color: Color(0xFFFF4D00)),
-                  label: const Text('Retake Photo',
-                      style: TextStyle(
+                  label: Text(l10n.proofRetakePhoto,
+                      style: const TextStyle(
                           color: Color(0xFFFF4D00),
                           fontWeight: FontWeight.w700,
                           fontSize: 13)),
                 ),
               const SizedBox(height: 20),
-              const Text('MANUAL ENTRY',
-                  style: TextStyle(
+              Text(l10n.proofManualEntry,
+                  style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF888888),
@@ -293,7 +295,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                         ),
                       ),
                     ),
-                    Text('GALLONS',
+                    Text(l10n.proofGallons,
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
@@ -319,14 +321,14 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Estimated Total',
-                            style: TextStyle(
+                        Text(l10n.proofEstimatedTotal,
+                            style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF555555))),
                         const SizedBox(height: 4),
                         Text(
-                            'at \$${_pricePerGallon.toStringAsFixed(2)} / gal',
+                            l10n.proofPricePerGal(_pricePerGallon.toStringAsFixed(2)),
                             style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF9CB0C3),
@@ -349,17 +351,17 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                 done: photoReady,
                 loading: _isUploading,
                 label: photoReady
-                    ? 'Meter photo uploaded'
+                    ? l10n.proofMeterPhotoUploaded
                     : _isUploading
-                        ? 'Uploading photo…'
-                        : 'Take meter gauge photo (required)',
+                        ? l10n.proofUploadingPhoto
+                        : l10n.proofTakeMeterPhoto,
               ),
               const SizedBox(height: 8),
               _buildRequirementRow(
                 done: hasValue,
                 label: hasValue
-                    ? 'Gallons entered: ${_gallonsController.text}'
-                    : 'Enter delivered gallons (required)',
+                    ? l10n.proofGallonsEntered(_gallonsController.text)
+                    : l10n.proofEnterGallons,
               ),
               const SizedBox(height: 24),
 
@@ -370,16 +372,16 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                     borderRadius: BorderRadius.circular(12),
                     border:
                         Border.all(color: const Color(0xFFFFE8DD))),
-                child: const Row(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline_rounded,
+                    const Icon(Icons.info_outline_rounded,
                         color: Color(0xFFFF4D00), size: 16),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Manual entries are flagged for supervisor review. Ensure the photo clearly shows the meter digits matching the entered quantity.',
-                        style: TextStyle(
+                        l10n.proofSupervisorReviewDesc,
+                        style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFFFF4D00),
                             height: 1.5,
@@ -416,10 +418,10 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                     )
                 : () {
                     final msg = _isUploading
-                        ? 'Please wait for the photo to finish uploading.'
+                        ? l10n.proofWaitUpload
                         : !photoReady
-                            ? 'Please take a photo of the fuel meter first.'
-                            : 'Please enter the delivered gallons.';
+                            ? l10n.proofTakePhotoFirst
+                            : l10n.proofEnterGallonsFirst;
                     ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                             content: Text(msg),
@@ -434,14 +436,14 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                   borderRadius: BorderRadius.circular(12)),
               elevation: 0,
             ),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Complete Order',
-                    style: TextStyle(
+                Text(l10n.proofCompleteOrder,
+                    style: const TextStyle(
                         fontSize: 17, fontWeight: FontWeight.w800)),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 22),
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward_rounded, size: 22),
               ],
             ),
           ),
@@ -451,6 +453,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
   }
 
   Widget _buildPhotoWidget(bool photoReady) {
+    final l10n = AppLocalizations.of(context)!;
     if (_localImage != null) {
       return Stack(
         fit: StackFit.expand,
@@ -459,22 +462,22 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
             _localImage!,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
-              return const Center(
-                child: Text('Waiting for image...', style: TextStyle(color: Color(0xFF888888))),
+              return Center(
+                child: Text(l10n.proofWaitingImage, style: const TextStyle(color: Color(0xFF888888))),
               );
             },
           ),
           if (_isUploading)
             Container(
               color: Colors.black.withValues(alpha: 0.5),
-              child: const Center(
+              child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 16),
-                    Text('Uploading…',
-                        style: TextStyle(
+                    const CircularProgressIndicator(color: Colors.white),
+                    const SizedBox(height: 16),
+                    Text(l10n.proofUploadingPhoto,
+                        style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 14)),
@@ -485,15 +488,15 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
           else if (photoReady)
             Container(
               color: Colors.black.withValues(alpha: 0.35),
-              child: const Center(
+              child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.check_circle_rounded,
+                    const Icon(Icons.check_circle_rounded,
                         color: Color(0xFF4CAF50), size: 52),
-                    SizedBox(height: 8),
-                    Text('Photo Saved',
-                        style: TextStyle(
+                    const SizedBox(height: 8),
+                    Text(l10n.proofPhotoSaved,
+                        style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
                             fontSize: 15)),
@@ -506,14 +509,14 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
     }
 
     if (_isUploading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Color(0xFFFF4D00)),
-            SizedBox(height: 16),
-            Text('Waiting for image...',
-                style: TextStyle(
+            const CircularProgressIndicator(color: Color(0xFFFF4D00)),
+            const SizedBox(height: 16),
+            Text(l10n.proofWaitingImage,
+                style: const TextStyle(
                     color: Color(0xFFFF4D00),
                     fontWeight: FontWeight.w700,
                     fontSize: 14)),
@@ -521,19 +524,19 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
         ),
       );
     }
-    return const Column(
+    return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.camera_alt_rounded, color: Color(0xFFAAAAAA), size: 40),
-        SizedBox(height: 12),
-        Text('Tap to take meter photo',
-            style: TextStyle(
+        const Icon(Icons.camera_alt_rounded, color: Color(0xFFAAAAAA), size: 40),
+        const SizedBox(height: 12),
+        Text(l10n.proofTapToTakePhoto,
+            style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF888888))),
-        SizedBox(height: 6),
-        Text('Ensure the final digits are clearly visible',
-            style: TextStyle(
+        const SizedBox(height: 6),
+        Text(l10n.proofDigitsVisible,
+            style: const TextStyle(
                 fontSize: 12,
                 color: Color(0xFFAAAAAA),
                 fontWeight: FontWeight.w500)),
@@ -708,12 +711,14 @@ class _InAppCameraScreenState extends State<_InAppCameraScreen>
       debugPrint('[CAMERA_DEBUG] CameraException code: ${e.code}');
       debugPrint('[CAMERA_DEBUG] CameraException description: ${e.description}');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Camera error: ${e.code}')));
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.deliveryProofCameraError(e.code))));
       }
     } catch (e) {
       debugPrint('[CAMERA_DEBUG] General init error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Init error: $e')));
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.deliveryProofInitError(e.toString()))));
       }
     }
   }
@@ -752,26 +757,27 @@ class _InAppCameraScreenState extends State<_InAppCameraScreen>
 
       debugPrint('[CAMERA_DEBUG] Navigator pop with image path');
       Navigator.of(context).pop(image.path);
-    } catch (e) {
-      debugPrint('[CAMERA_DEBUG] Capture error: $e');
-      if (mounted) {
-        setState(() {
-          _isTakingPicture = false;
-          _isPopping = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Capture failed. Try again.'), backgroundColor: Colors.red),
-        );
+      } catch (e) {
+        debugPrint('[CAMERA_DEBUG] Capture error: $e');
+        if (mounted) {
+          setState(() {
+            _isTakingPicture = false;
+            _isPopping = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(AppLocalizations.of(context)!.proofCaptureFailed), backgroundColor: Colors.red),
+          );
+        }
       }
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text('DEBUG CAMERA'),
+    @override
+    Widget build(BuildContext context) {
+      final l10n = AppLocalizations.of(context)!;
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          title: Text(l10n.proofDebugCamera),
         backgroundColor: Colors.blueGrey,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),

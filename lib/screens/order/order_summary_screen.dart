@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'order_tracking_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 
 class OrderSummaryScreen extends StatelessWidget {
   final DateTime? scheduledDateTime;
@@ -19,6 +20,7 @@ class OrderSummaryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
@@ -44,9 +46,9 @@ class OrderSummaryScreen extends StatelessWidget {
             ),
           ),
         ),
-        title: const Text(
-          'Order Summary',
-          style: TextStyle(color: Color(0xFF333333), fontWeight: FontWeight.bold, fontSize: 18),
+        title: Text(
+          l10n.orderSummaryTitle,
+          style: const TextStyle(color: Color(0xFF333333), fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
       ),
@@ -56,54 +58,53 @@ class OrderSummaryScreen extends StatelessWidget {
           children: [
             // Fuel Details Card
             _buildSummaryCard(
-              title: 'Fuel Details',
+              title: l10n.orderSummaryFuelDetails,
               icon: Icons.local_gas_station_rounded,
               iconColor: const Color(0xFFFF6600),
               iconBgColor: const Color(0xFFFFECE0),
               children: [
-                _buildInfoRow('Fuel Type', 'Regular'),
-                _buildInfoRow('Price per Gallon', '\$3.49'),
-                _buildInfoRow('Quantity', '15 gallons'),
+                _buildInfoRow(l10n.orderSummaryFuelType, l10n.orderSummaryRegular),
+                _buildInfoRow(l10n.orderSummaryPricePerGallon, l10n.orderSummaryPriceVal('3.49')),
+                _buildInfoRow(l10n.orderSummaryQuantity, l10n.orderSummaryQuantityVal('15')),
                 const Divider(height: 32),
-                _buildInfoRow('Fuel Total', '\$52.35', isBold: true),
+                _buildInfoRow(l10n.orderSummaryFuelTotal, l10n.orderSummaryFuelTotalVal('52.35'), isBold: true),
               ],
             ),
             const SizedBox(height: 24),
             
             // Delivery Details Card
             _buildSummaryCard(
-              title: 'Delivery Details',
+              title: l10n.orderSummaryDeliveryDetails,
               icon: Icons.calendar_today_rounded,
               iconColor: const Color(0xFF2F80ED),
               iconBgColor: const Color(0xFFE8F1FF),
               children: [
                 _buildDeliveryInfoRow(
                   icon: Icons.directions_car_outlined,
-                  title: 'Vehicle',
-                  value: 'Tesla Model 3',
-                  subtitle: 'ABC 1234',
+                  title: l10n.orderSummaryVehicle,
+                  value: l10n.orderSummaryPlaceholderVehicle,
+                  subtitle: l10n.orderSummaryPlaceholderVehicleSub,
                 ),
                 const SizedBox(height: 16),
                 _buildDeliveryInfoRow(
                   icon: Icons.location_on_outlined,
-                  title: 'Address',
-                  value: 'Home',
-                  subtitle: '123 Main Street, San Francisco, CA 94102',
+                  title: l10n.orderSummaryAddress,
+                  value: l10n.orderSummaryPlaceholderAddress,
+                  subtitle: l10n.orderSummaryPlaceholderAddressSub,
                 ),
                 const SizedBox(height: 16),
                 _buildDeliveryInfoRow(
                   icon: Icons.access_time_outlined,
-                  title: 'Scheduled Time',
+                  title: l10n.orderSummaryScheduledTime,
                   value: scheduledDateTime != null 
                       ? DateFormat('EEE MMM dd, yyyy · hh:mm a').format(scheduledDateTime!)
-                      : 'Not Scheduled',
+                      : l10n.orderSummaryNotScheduled,
                   valueColor: scheduledDateTime != null ? const Color(0xFF333333) : Colors.red,
                 ),
               ],
             ),
             const SizedBox(height: 24),
             
-            // Payment Summary Section
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -113,28 +114,28 @@ class OrderSummaryScreen extends StatelessWidget {
               child: Column(
                 children: [
                   Row(
-                    children: const [
-                      Icon(Icons.payment_rounded, color: Color(0xFFFF6600), size: 20),
-                      SizedBox(width: 12),
+                    children: [
+                      const Icon(Icons.payment_rounded, color: Color(0xFFFF6600), size: 20),
+                      const SizedBox(width: 12),
                       Text(
-                        'Payment Summary',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF333333)),
+                        l10n.orderSummaryPaymentSummary,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF333333)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  _buildInfoRow('Fuel Cost', '\$52.35'), // Fixing the split $52 .35 from screenshot to a clean one or matching? Screenshot has $52 and .35 below.
+                  _buildInfoRow(l10n.orderSummaryFuelCost, l10n.orderSummaryFuelTotalVal('52.35')), // Fixing the split $52 .35 from screenshot to a clean one or matching? Screenshot has $52 and .35 below.
                   const Divider(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
+                    children: [
                       Text(
-                        'Total Due Today',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF333333)),
+                        l10n.orderSummaryTotalDueToday,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF333333)),
                       ),
                       Text(
-                        '\$52.35',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Color(0xFFFF6600)),
+                        l10n.orderSummaryFuelTotalVal('52.35'),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Color(0xFFFF6600)),
                       ),
                     ],
                   ),
@@ -143,7 +144,6 @@ class OrderSummaryScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             
-            // Payment Method Card
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
@@ -171,23 +171,23 @@ class OrderSummaryScreen extends StatelessWidget {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
+                      children: [
+                        const Text(
                           '•••• 4242',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF333333)),
                         ),
                         Text(
-                          'Default payment',
-                          style: TextStyle(fontSize: 12, color: Color(0xFFAAAAAA)),
+                          l10n.orderSummaryDefaultPayment,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFFAAAAAA)),
                         ),
                       ],
                     ),
                   ),
                   TextButton(
                     onPressed: () {},
-                    child: const Text(
-                      'Change',
-                      style: TextStyle(color: Color(0xFFFF6600), fontWeight: FontWeight.bold),
+                    child: Text(
+                      l10n.orderSummaryChange,
+                      style: const TextStyle(color: Color(0xFFFF6600), fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -207,7 +207,7 @@ class OrderSummaryScreen extends StatelessWidget {
               final user = Supabase.instance.client.auth.currentUser;
               if (user == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please log in to place an order')),
+                  SnackBar(content: Text(l10n.orderSummaryLoginRequired)),
                 );
                 return;
               }
@@ -249,7 +249,7 @@ class OrderSummaryScreen extends StatelessWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error placing order: $e')),
+                    SnackBar(content: Text(l10n.orderSummaryPlaceError(e.toString()))),
                   );
                 }
               }
@@ -264,13 +264,13 @@ class OrderSummaryScreen extends StatelessWidget {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+              children: [
                 Text(
-                  'Place Order - \$52.35',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  l10n.orderSummaryPlaceOrderButton('52.35'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
-                SizedBox(width: 10),
-                Icon(Icons.check, size: 20),
+                const SizedBox(width: 10),
+                const Icon(Icons.check, size: 20),
               ],
             ),
           ),

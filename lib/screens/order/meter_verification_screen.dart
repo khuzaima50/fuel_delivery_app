@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'meter_preview_screen.dart';
 
 class MeterVerificationScreen extends StatefulWidget {
@@ -68,7 +69,7 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Camera error: $e'),
+          content: Text(AppLocalizations.of(context)!.meterVerificationCameraError(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -138,8 +139,8 @@ class _MeterVerificationScreenState extends State<MeterVerificationScreen>
       debugPrint('Error taking picture: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to take photo. Please try again.'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.meterVerificationCaptureFailed),
           backgroundColor: Colors.red,
         ),
       );

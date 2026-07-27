@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../services/notification_service.dart';
 import '../chat/chat_screen.dart';
 import 'delivery_navigation_screen.dart';
@@ -223,11 +224,79 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         }
       } else {
         final errMsg = data['error_message'] as String? ?? 'no details';
-        debugPrint('[Route ERROR] Details API status=$status — $errMsg');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route ERROR] Details API status=$status — $errMsg — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
       }
     } catch (e) {
-      debugPrint('Error fetching route in details: $e');
+      debugPrint('Error fetching route in details: $e — trying OSRM fallback');
+      if (mounted) {
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
+      }
+    }
+  }
+
+  Future<void> _fetchRouteOSRM(Position driverPos, double dLat, double dLng) async {
+    try {
+      final osrmUri = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving'
+        '/${driverPos.longitude},${driverPos.latitude};$dLng,$dLat'
+        '?overview=full&geometries=polyline',
+      );
+      debugPrint('[Route OSRM Fallback Details] Fetching OSRM: $osrmUri');
+      final response = await http.get(osrmUri);
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final routes = data['routes'] as List?;
+        if (routes != null && routes.isNotEmpty) {
+          final points = routes[0]['geometry'] as String? ?? '';
+          final decoded = _decodePolyline(points);
+          setState(() {
+            _polylines.add(Polyline(
+              polylineId: const PolylineId('route'),
+              points: decoded,
+              color: const Color(0xFFFF4D00),
+              width: 5,
+            ));
+            
+            _markers.add(Marker(
+              markerId: const MarkerId('driver'),
+              position: LatLng(driverPos.latitude, driverPos.longitude),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+            ));
+            
+            _markers.add(Marker(
+              markerId: const MarkerId('destination'),
+              position: LatLng(dLat, dLng),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            ));
+            
+            _isLoadingRoute = false;
+          });
+
+          // Fit bounds
+          if (_mapController != null) {
+            final bounds = LatLngBounds(
+              southwest: LatLng(
+                driverPos.latitude < dLat ? driverPos.latitude : dLat,
+                driverPos.longitude < dLng ? driverPos.longitude : dLng,
+              ),
+              northeast: LatLng(
+                driverPos.latitude > dLat ? driverPos.latitude : dLat,
+                driverPos.longitude > dLng ? driverPos.longitude : dLng,
+              ),
+            );
+            try {
+              _mapController!.moveCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+            } catch (e) {
+              debugPrint('Error moving camera bounds: $e');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching fallback OSRM route in details: $e');
       if (mounted) setState(() => _isLoadingRoute = false);
     }
   }
@@ -286,9 +355,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Future<void> _makePhoneCall(BuildContext context, String? phone) async {
+    final l10n = AppLocalizations.of(context)!;
     if (phone == null || phone.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No phone number available.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.orderDetailsNoContactInfo)));
       }
       return;
     }
@@ -301,14 +371,23 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch phone dialer.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.rtdCallError)));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final order = widget.order;
+    
+    String displayName = _customerName;
+    if (displayName == 'Loading...') {
+      displayName = l10n.common_loading;
+    } else if (displayName == 'Customer') {
+      displayName = l10n.orderDetailsCustomer;
+    }
+
     final String shortId = '#ORD-${order['id'].toString().substring(0, 4).toUpperCase()}';
     final String status = order['status']?.toString().toUpperCase() ?? 'UNKNOWN';
     final String address = order['delivery_address'] ?? 'Unknown Location';
@@ -427,7 +506,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     color: widget.order['status'] == 'emergency' ? Colors.white : Colors.redAccent,
                     size: 20,
                   ),
-                  tooltip: 'Flag as Emergency',
+                  tooltip: l10n.orderDetailsEmergencyTooltip,
                   onPressed: () async {
                     final newStatus = widget.order['status'] == 'emergency' ? 'assigned' : 'emergency';
                     try {
@@ -442,14 +521,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(newStatus == 'emergency' ? 'Order flagged as Emergency! 🚨' : 'Order moved back to Assigned.'),
+                            content: Text(newStatus == 'emergency' ? l10n.orderDetailsEmergencyFlagged : l10n.orderDetailsAssignedFlagged),
                             backgroundColor: newStatus == 'emergency' ? Colors.redAccent : Colors.grey[800],
                           ),
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.orderDetailsError(e.toString()))));
                       }
                     }
                   },
@@ -506,7 +585,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _customerName,
+                            displayName,
                             style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
@@ -535,7 +614,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             )
                           else
                             Text(
-                              _customerPhone.isNotEmpty ? _customerPhone : 'No contact info',
+                              _customerPhone.isNotEmpty ? _customerPhone : l10n.orderDetailsNoContactInfo,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF888888),
@@ -559,7 +638,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             ));
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Customer information not available for chat.')),
+                              SnackBar(content: Text(l10n.orderDetailsChatUnavailable)),
                             );
                           }
                         },
@@ -622,9 +701,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'ORDER TOTAL',
-                      style: TextStyle(
+                    Text(
+                      l10n.orderDetailsOrderTotal,
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                         color: Color(0xFF888888),
@@ -633,8 +712,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     ),
                     Text(
                       isDelivered
-                          ? (amountVal > 0 ? '\$$amount' : 'Completed ✓')
-                          : (amountVal > 0 ? '\$$amount' : 'Pending'),
+                          ? (amountVal > 0 ? '\$$amount' : l10n.orderDetailsCompletedCheck)
+                          : (amountVal > 0 ? '\$$amount' : l10n.orderDetailsPending),
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
@@ -676,9 +755,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'SCHEDULED DELIVERY',
-                              style: TextStyle(
+                            Text(
+                              l10n.orderDetailsScheduledDeliveryHeader,
+                              style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF2F80ED),
@@ -736,7 +815,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'CUSTOMER NOTES',
+                            l10n.orderDetailsCustomerNotesHeader,
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -752,7 +831,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       Text(
                         dropOffNotes.isNotEmpty
                             ? dropOffNotes
-                            : 'No special instructions provided.',
+                            : l10n.orderDetailsNoInstructionsDesc,
                         style: TextStyle(
                           fontSize: 14,
                           color: dropOffNotes.isNotEmpty
@@ -825,9 +904,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'DELIVERY LOCATION',
-                                style: TextStyle(
+                              Text(
+                                l10n.orderDetailsDeliveryLocationHeader,
+                                style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   color: Color(0xFF888888),
@@ -871,17 +950,17 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                     }
                                   },
                                   child: Row(
-                                    children: const [
+                                    children: [
                                       Text(
-                                        'Navigate',
-                                        style: TextStyle(
+                                        l10n.orderDetailsNavigate,
+                                        style: const TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
                                           color: Color(0xFFFF4D00),
                                         ),
                                       ),
-                                      SizedBox(width: 4),
-                                      Icon(
+                                      const SizedBox(width: 4),
+                                      const Icon(
                                         Icons.explore,
                                         color: Color(0xFFFF4D00),
                                         size: 16,
@@ -919,9 +998,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'ORDER TIMELINE',
-                      style: TextStyle(
+                    Text(
+                      l10n.orderDetailsOrderTimelineHeader,
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF888888),
@@ -930,25 +1009,25 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     ),
                     const SizedBox(height: 16),
                     _buildTimelineItem(
-                      'Order Placed',
+                      l10n.orderDetailsTimelinePlaced,
                       formatTimelineDate(order['created_at']),
                       Icons.receipt_long,
                       const Color(0xFF2196F3),
                     ),
                     _buildTimelineItem(
-                      'Order Accepted',
+                      l10n.orderDetailsTimelineAccepted,
                       formatTimelineDate(order['accepted_at']),
                       Icons.check_circle_outline,
                       order['accepted_at'] != null ? const Color(0xFF4CAF50) : Colors.grey,
                     ),
                     _buildTimelineItem(
-                      'Driver Arrived',
+                      l10n.orderDetailsTimelineArrived,
                       formatTimelineDate(order['arrived_at']),
                       Icons.location_on,
                       order['arrived_at'] != null ? const Color(0xFFFFB800) : Colors.grey,
                     ),
                     _buildTimelineItem(
-                      'Order Completed',
+                      l10n.orderDetailsTimelineCompleted,
                       formatTimelineDate(order['completed_at'] ?? order['delivered_at']),
                       Icons.flag_outlined,
                       (order['completed_at'] != null || order['delivered_at'] != null) ? const Color(0xFFFF4900) : Colors.grey,
@@ -984,9 +1063,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: const Text(
-                                    "This order is scheduled for later. You can only start it 1 hour before the scheduled time.",
-                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                  content: Text(
+                                    l10n.orderDetailsScheduledError,
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
                                   ),
                                   backgroundColor: const Color(0xFFFF4D00),
                                   behavior: SnackBarBehavior.floating,
@@ -1019,8 +1098,8 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
                         // Trigger Local Notification for Driver
                         NotificationService.showImmediateNotification(
-                          title: 'Delivery Journey Started! 🚀',
-                          body: 'Heading to source location for pickup.',
+                          title: l10n.orderDetailsJourneyStarted,
+                          body: l10n.orderDetailsJourneyStartedBody,
                           type: 'order',
                           orderId: order['id']?.toString(),
                         );
@@ -1043,9 +1122,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Start Delivery Journey',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    child: Text(
+                      l10n.orderDetailsStartJourney,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),

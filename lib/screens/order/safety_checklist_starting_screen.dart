@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../chat/chat_screen.dart';
 import 'confirm_protocol_screen.dart';
 
@@ -597,7 +598,7 @@ class _SafetyChecklistStartingScreenState
     final phone = _customerPhone;
     if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No phone number available.')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.safetyNoPhone)),
       );
       return;
     }
@@ -611,7 +612,7 @@ class _SafetyChecklistStartingScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch phone dialer.')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.safetyCallError)),
         );
       }
     }

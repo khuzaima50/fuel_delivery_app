@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../services/notification_service.dart';
 import 'delivery_complete_screen.dart';
 
@@ -37,6 +38,7 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -310,18 +312,18 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
                   elevation: 0,
                 ),
                 child: _isFinalizing
-                    ? const Row(
+                    ? Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          SizedBox(
+                          const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2),
                           ),
-                          SizedBox(width: 12),
-                          Text('Saving…',
-                              style: TextStyle(
+                          const SizedBox(width: 12),
+                          Text(l10n.safetySaving,
+                              style: const TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.w700)),
                         ],
                       )
@@ -453,6 +455,7 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
   }
 
   Future<void> _finalizeDelivery() async {
+    final l10n = AppLocalizations.of(context)!;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _isFinalizing = true);
     try {
@@ -570,7 +573,7 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text(l10n.safetyError(e.toString().replaceAll('Exception: ', ''))),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 5),
           ),

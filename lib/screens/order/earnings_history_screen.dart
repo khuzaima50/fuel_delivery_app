@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'order_details_screen.dart';
 
 class EarningsHistoryScreen extends StatefulWidget {
@@ -44,10 +45,11 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
     }
   }
 
-  String _formatDate(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  String _formatDate(DateTime d, AppLocalizations l10n) {
+    final months = [
+      l10n.monthJan, l10n.monthFeb, l10n.monthMar, l10n.monthApr,
+      l10n.monthMay, l10n.monthJun, l10n.monthJul, l10n.monthAug,
+      l10n.monthSep, l10n.monthOct, l10n.monthNov, l10n.monthDec,
     ];
     final hour = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
     final min = d.minute.toString().padLeft(2, '0');
@@ -55,21 +57,23 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
     return '${hour.toString().padLeft(2, '0')}:$min $ampm · ${months[d.month - 1]} ${d.day}';
   }
 
-  String _dayLabel(DateTime d, DateTime now) {
+  String _dayLabel(DateTime d, DateTime now, AppLocalizations l10n) {
     final today = DateTime(now.year, now.month, now.day);
     final orderDay = DateTime(d.year, d.month, d.day);
     final diff = today.difference(orderDay).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    if (diff == 0) return l10n.earningsToday;
+    if (diff == 1) return l10n.earningsYesterday;
+    final months = [
+      l10n.monthJan, l10n.monthFeb, l10n.monthMar, l10n.monthApr,
+      l10n.monthMay, l10n.monthJun, l10n.monthJul, l10n.monthAug,
+      l10n.monthSep, l10n.monthOct, l10n.monthNov, l10n.monthDec,
     ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFFFBFBFB),
       appBar: AppBar(
@@ -98,9 +102,9 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
             ),
           ),
         ),
-        title: const Text(
-          'Delivery History',
-          style: TextStyle(
+        title: Text(
+          l10n.historyTitle,
+          style: const TextStyle(
             color: Color(0xFF1F1F1F),
             fontSize: 16,
             fontWeight: FontWeight.w800,
@@ -125,7 +129,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
             );
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text(l10n.historyError(snapshot.error.toString())));
           }
 
           final currentUser = Supabase.instance.client.auth.currentUser;
@@ -139,18 +143,18 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
           }).toList();
 
           if (orders.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(40),
+                padding: const EdgeInsets.all(40),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.receipt_long_outlined,
+                    const Icon(Icons.receipt_long_outlined,
                         size: 64, color: Color(0xFFDDDDDD)),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     Text(
-                      'No completed deliveries yet.',
-                      style: TextStyle(
+                      l10n.historyNoDeliveries,
+                      style: const TextStyle(
                         color: Color(0xFF888888),
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
@@ -173,7 +177,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
                 if (d.isAfter(now)) {
                   d = now;
                 }
-                final label = _dayLabel(d, now);
+                final label = _dayLabel(d, now, l10n);
                 grouped.putIfAbsent(label, () => []).add(order);
               } catch (_) {}
             }
@@ -211,7 +215,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
                       d = parsedDate;
                     } catch (_) {}
                   }
-                  final timeStr = d != null ? _formatDate(d) : '—';
+                  final timeStr = d != null ? _formatDate(d, l10n) : '—';
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -224,9 +228,10 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
                         );
                       },
                       child: _buildDeliveryItem(
-                        title: '$fuelType ($qty Gal)',
+                        title: l10n.historyFuelQty(fuelType, qty.toString()),
                         subtitle: timeStr,
                         amount: amount,
+                        completedLabel: l10n.historyCompleted,
                       ),
                     ),
                   );
@@ -245,6 +250,7 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
     required String title,
     required String subtitle,
     required double amount,
+    required String completedLabel,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -312,9 +318,9 @@ class _EarningsHistoryScreenState extends State<EarningsHistoryScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Completed',
-                style: TextStyle(
+              Text(
+                completedLabel,
+                style: const TextStyle(
                   fontSize: 12,
                   color: Color(0xFF00C853),
                   fontWeight: FontWeight.w700,

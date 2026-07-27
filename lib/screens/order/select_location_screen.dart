@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'order_summary_screen.dart';
 
 class SelectLocationScreen extends StatefulWidget {
@@ -186,6 +187,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: Stack(
         children: [
@@ -238,7 +240,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
             right: 0,
             child: Center(
               child: Text(
-                'Confirm Location',
+                l10n.selectLocationTitle,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -268,14 +270,14 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                 ],
               ),
               child: Row(
-                children: const [
-                  Icon(Icons.search, color: Color(0xFFAAAAAA), size: 24),
-                  SizedBox(width: 12),
+                children: [
+                  const Icon(Icons.search, color: Color(0xFFAAAAAA), size: 24),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: TextField(
                       decoration: InputDecoration(
-                        hintText: 'Search for a different location..',
-                        hintStyle: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
+                        hintText: l10n.selectLocationSearchHint,
+                        hintStyle: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
                         border: InputBorder.none,
                       ),
                     ),
@@ -357,9 +359,9 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'CURRENT SELECTION',
-                    style: TextStyle(
+                  Text(
+                    l10n.selectLocationCurrentSelection,
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFFAAAAAA),
@@ -370,10 +372,10 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          '123 Innovation Drive',
-                          style: TextStyle(
+                          l10n.selectLocationPlaceholderAddress,
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF333333),
@@ -383,9 +385,9 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                       const Icon(Icons.edit_outlined, size: 20, color: Color(0xFF333333)),
                     ],
                   ),
-                  const Text(
-                    'San Francisco, CA 94105',
-                    style: TextStyle(
+                  Text(
+                    l10n.selectLocationPlaceholderCity,
+                    style: const TextStyle(
                       fontSize: 14,
                       color: Color(0xFFAAAAAA),
                     ),
@@ -414,16 +416,16 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                                     child: const Icon(Icons.access_time_filled, size: 16, color: Color(0xFFFF6600)),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Text(
-                                    'ESTIMATED WAIT',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF666666)),
+                                  Text(
+                                    l10n.selectLocationEstimatedWait,
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF666666)),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              const Text(
-                                '15-20 mins',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+                              Text(
+                                l10n.selectLocationPlaceholderWait,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
                               ),
                             ],
                           ),
@@ -451,16 +453,16 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                                     child: const Icon(Icons.directions_car_filled, size: 16, color: Color(0xFFFF6600)),
                                   ),
                                   const SizedBox(width: 8),
-                                  const Text(
-                                    'SERVICE FEE',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF666666)),
+                                  Text(
+                                    l10n.selectLocationServiceFee,
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF666666)),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              const Text(
-                                '\$4.99',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+                              Text(
+                                l10n.selectLocationPlaceholderFee,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
                               ),
                             ],
                           ),
@@ -480,7 +482,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                               scheduledDateTime: widget.scheduledDateTime,
                               deliveryLat: _selectedPosition.latitude,
                               deliveryLng: _selectedPosition.longitude,
-                              deliveryAddress: '123 Innovation Drive, San Francisco, CA 94105',
+                              deliveryAddress: l10n.selectLocationPlaceholderFullAddress,
                             ),
                           ),
                         );
@@ -495,13 +497,13 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
+                        children: [
                           Text(
-                            'Confirm Order',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            l10n.selectLocationConfirmOrder,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
-                          SizedBox(width: 12),
-                          Icon(Icons.arrow_forward, size: 20),
+                          const SizedBox(width: 12),
+                          const Icon(Icons.arrow_forward, size: 20),
                         ],
                       ),
                     ),

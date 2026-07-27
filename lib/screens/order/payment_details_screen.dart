@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'select_location_screen.dart';
 
 class PaymentDetailsScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -130,10 +132,10 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
                           Expanded(
                             child: TextField(
                               controller: _couponController,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 border: InputBorder.none,
-                                hintText: 'Enter Coupon Code',
-                                hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                                hintText: l10n.paymentCouponHint,
+                                hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
                               ),
                             ),
                           ),
@@ -151,15 +153,15 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
                       ),
-                      child: const Text('Button', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(l10n.paymentButtonLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 32),
-              const Text(
-                'Have a Coupon?',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+              Text(
+                l10n.paymentHaveCoupon,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
               ),
               const SizedBox(height: 16),
               Container(
@@ -173,10 +175,10 @@ class _PaymentDetailsScreenState extends State<PaymentDetailsScreen> {
                 child: TextField(
                   controller: _noteController,
                   maxLines: 4,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: InputBorder.none,
-                    hintText: 'Add Note',
-                    hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                    hintText: l10n.paymentAddNoteHint,
+                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                 ),
               ),

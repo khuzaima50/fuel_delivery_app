@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -621,8 +622,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Go Back',
-                    style: TextStyle(
+                child: Text(AppLocalizations.of(context)!.orderTrackingGoBack,
+                    style: const TextStyle(
                         color: Color(0xFFFF6600),
                         fontWeight: FontWeight.w600)),
               ),

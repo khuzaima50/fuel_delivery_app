@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../../services/location_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'fuel_pickup_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -385,8 +386,8 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       if (!mounted) return;
 
       if (response.statusCode != 200) {
-        debugPrint('[Route API Response] HTTP error ${response.statusCode}');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route API Response] HTTP error ${response.statusCode} — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -395,15 +396,15 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       debugPrint('[Route API Response] status=$status');
 
       if (status != 'OK') {
-        debugPrint('[Route ERROR] API status=$status — ${data['error_message'] ?? 'no details'}');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route ERROR] API status=$status — ${data['error_message'] ?? 'no details'} — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
       final routes = data['routes'] as List?;
       if (routes == null || routes.isEmpty) {
-        debugPrint('[Route ERROR] No routes returned');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Route ERROR] No routes returned — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -427,8 +428,8 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       debugPrint('[Polyline Raw] ${encodedPolyline.length > 80 ? '${encodedPolyline.substring(0, 80)}…' : encodedPolyline}');
 
       if (encodedPolyline.isEmpty) {
-        debugPrint('[Polyline ERROR] Empty polyline string');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Polyline ERROR] Empty polyline string — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -436,8 +437,8 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       debugPrint('[Polyline Points] count = ${decodedPoints.length}');
 
       if (decodedPoints.length < 2) {
-        debugPrint('[Polyline ERROR] Too few points: ${decodedPoints.length}');
-        if (mounted) setState(() => _isLoadingRoute = false);
+        debugPrint('[Polyline ERROR] Too few points: ${decodedPoints.length} — trying OSRM fallback');
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
         return;
       }
 
@@ -484,7 +485,99 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       }
 
     } catch (e) {
-      debugPrint('[Route ERROR] Exception: $e');
+      debugPrint('[Route ERROR] Exception: $e — trying OSRM fallback');
+      if (mounted) {
+        await _fetchRouteOSRM(driverPos, dLat, dLng);
+      }
+    }
+  }
+
+  Future<void> _fetchRouteOSRM(Position driverPos, double dLat, double dLng) async {
+    try {
+      final osrmUri = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving'
+        '/${driverPos.longitude},${driverPos.latitude};$dLng,$dLat'
+        '?overview=full&geometries=polyline',
+      );
+      debugPrint('[Route OSRM Fallback] Fetching OSRM: $osrmUri');
+      final response = await http.get(osrmUri).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        debugPrint('[Route OSRM Fallback] HTTP error ${response.statusCode}');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final routes = data['routes'] as List?;
+      if (routes == null || routes.isEmpty) {
+        debugPrint('[Route OSRM Fallback] No routes returned');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final route = routes[0] as Map<String, dynamic>;
+      final encodedPolyline = (route['geometry'] as String?) ?? '';
+      if (encodedPolyline.isEmpty) {
+        debugPrint('[Route OSRM Fallback] Empty polyline string');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final decodedPoints = _decodePolyline(encodedPolyline);
+      debugPrint('[Route OSRM Fallback] Polyline Points count = ${decodedPoints.length}');
+
+      if (decodedPoints.length < 2) {
+        debugPrint('[Route OSRM Fallback] Too few points: ${decodedPoints.length}');
+        if (mounted) setState(() => _isLoadingRoute = false);
+        return;
+      }
+
+      final double apiDistanceMeters = (route['distance'] as num?)?.toDouble() ?? 0.0;
+      final int apiDurationSecs = (route['duration'] as num?)?.toInt() ?? 0;
+
+      debugPrint('[Route OSRM Fallback Stats] duration=${apiDurationSecs}s distance=${apiDistanceMeters}m');
+
+      _routePoints
+        ..clear()
+        ..addAll(decodedPoints);
+
+      _markers.removeWhere((m) => m.markerId.value == 'destination');
+      _markers.add(Marker(
+        markerId: const MarkerId('destination'),
+        position: LatLng(dLat, dLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(title: _destinationLabel),
+        zIndexInt: 1,
+      ));
+
+      setState(() {
+        _routeFetched = true;
+        _isLoadingRoute = false;
+        _polylines
+          ..clear()
+          ..add(Polyline(
+            polylineId: const PolylineId('route'),
+            color: const Color(0xFF4285F4),
+            points: List<LatLng>.from(decodedPoints),
+            width: 6,
+            jointType: JointType.round,
+            startCap: Cap.roundCap,
+            endCap: Cap.roundCap,
+          ));
+      });
+
+      if (apiDistanceMeters > 0) {
+        _applyStats(
+          distanceMeters: apiDistanceMeters,
+          durationSecs: apiDurationSecs,
+        );
+      } else {
+        _updateStats(driverPos);
+      }
+    } catch (osrmError) {
+      debugPrint('[Route OSRM Fallback ERROR] Exception: $osrmError');
       if (mounted) setState(() => _isLoadingRoute = false);
     }
   }
@@ -511,19 +604,20 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (_gpsDisabled) {
       return _errorScreen(
-        'GPS is Disabled',
-        'Please turn on Location Services in your device settings.',
+        l10n.navGpsDisabled,
+        l10n.navGpsDisabledDesc,
         Icons.location_disabled_rounded,
       );
     }
     if (_locationPermissionDenied) {
       return _errorScreen(
-        'Location Permission Denied',
-        'FuelDirect needs location access to navigate.',
+        l10n.navPermissionDenied,
+        l10n.navPermissionDeniedDesc,
         Icons.lock_rounded,
-        actionLabel: 'Open Settings',
+        actionLabel: l10n.navOpenSettings,
         onAction: () async => Geolocator.openAppSettings(),
       );
     }
@@ -639,9 +733,9 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                           color: const Color(0xFFFFE8DD),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          'CUSTOMER',
-                          style: TextStyle(
+                        child: Text(
+                          l10n.chatCustomer.toUpperCase(),
+                          style: const TextStyle(
                             color: Color(0xFFFF4D00),
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -655,23 +749,23 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                     children: [
                       _buildStatBox(
                         'ETA',
-                        _isCalculating ? 'Calc...' : _etaTime,
+                        _isCalculating ? l10n.navCalculating : _etaTime,
                       ),
                       const SizedBox(width: 12),
                       _buildStatBox(
                         'TIME',
                         _isCalculating
-                            ? 'Calc...'
-                            : '$_estimatedMinutes min',
+                            ? l10n.navCalculating
+                            : l10n.navMinutes('$_estimatedMinutes'),
                       ),
                       const SizedBox(width: 12),
                       _buildStatBox(
                         'DIST',
                         _isCalculating
-                            ? 'Calc...'
+                            ? l10n.navCalculating
                             : (_distanceMiles > 0
-                                ? '${_distanceMiles.toStringAsFixed(1)} mi'
-                                : 'N/A'),
+                                ? l10n.navMiles(_distanceMiles.toStringAsFixed(1))
+                                : l10n.common_na),
                       ),
                     ],
                   ),
@@ -719,7 +813,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'CUSTOMER NOTES',
+                                  l10n.navCustomerNotes,
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w800,
@@ -733,7 +827,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                                 Text(
                                   notes.isNotEmpty
                                       ? notes
-                                      : 'No special instructions provided.',
+                                      : l10n.navNoInstructions,
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: notes.isNotEmpty
@@ -812,14 +906,14 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                             borderRadius: BorderRadius.circular(14)),
                         elevation: 0,
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check_circle_rounded, size: 20),
-                          SizedBox(width: 10),
+                          const Icon(Icons.check_circle_rounded, size: 20),
+                          const SizedBox(width: 10),
                           Text(
-                            'Arrived at Source',
-                            style: TextStyle(
+                            l10n.navArrivedAtSource,
+                            style: const TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.w700),
                           ),
                         ],
@@ -849,7 +943,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                               color: Color(0xFFCC0000),
                             ),
                       label: Text(
-                        _isReleasing ? 'Releasing…' : 'Release Order',
+                        _isReleasing ? l10n.navReleasing : l10n.navReleaseOrder,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -875,6 +969,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
 
   // ── Release Order ────────────────────────────────────────────────
   Future<void> _releaseOrder() async {
+    final l10n = AppLocalizations.of(context)!;
     final orderId = widget.order?['id']?.toString();
     if (orderId == null) return;
 
@@ -885,14 +980,14 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       builder: (ctx) => AlertDialog(
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded,
+            const Icon(Icons.warning_amber_rounded,
                 color: Color(0xFFCC0000), size: 22),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Text(
-              'Release Order?',
-              style: TextStyle(
+              l10n.navReleasePromptTitle,
+              style: const TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 18,
                 color: Color(0xFF1C2733),
@@ -900,9 +995,9 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
             ),
           ],
         ),
-        content: const Text(
-          'Are you sure you want to release this order?\n\nIt will be returned to the available pool and reassigned to another driver.',
-          style: TextStyle(
+        content: Text(
+          l10n.navReleasePromptDesc,
+          style: const TextStyle(
             fontSize: 14,
             color: Color(0xFF555555),
             height: 1.5,
@@ -923,9 +1018,9 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                           borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
+                    child: Text(
+                      l10n.common_cancel,
+                      style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF888888)),
                     ),
@@ -943,9 +1038,9 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
-                      'Release',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+                    child: Text(
+                      l10n.navRelease,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ),
@@ -978,11 +1073,11 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.white, size: 18),
-              SizedBox(width: 10),
-              Text('Order released. It will be reassigned.'),
+              const Icon(Icons.check_circle, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.navReleaseSuccess),
             ],
           ),
           backgroundColor: const Color(0xFF4CAF50),
@@ -1001,7 +1096,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to release order: $e'),
+          content: Text(AppLocalizations.of(context)!.navReleaseFailed(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -1116,8 +1211,8 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Go Back',
-                    style: TextStyle(
+                child: Text(AppLocalizations.of(context)!.common_goBack,
+                    style: const TextStyle(
                         color: Color(0xFFFF4D00),
                         fontWeight: FontWeight.w600)),
               ),

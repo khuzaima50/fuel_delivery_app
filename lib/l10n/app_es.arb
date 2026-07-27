@@ -291,6 +291,27 @@
   "chatMessageHint": "Escribe un mensaje...",
   "chatSend": "Enviar",
   "chatNoMessages": "Sin mensajes aún. ¡Inicia la conversación!",
+  "chatSendError": "Error al enviar: {error}",
+  "@chatSendError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatError": "Error: {error}",
+  "@chatError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatToday": "Hoy",
+  "chatYesterday": "Ayer",
+  "chatCustomer": "Cliente",
+  "chatNoMessagesTitle": "Sin mensajes aún",
+  "chatNoMessagesSubtitle": "Inicia la conversación abajo",
 
   "notificationsTitle": "Notificaciones",
   "notificationsEmpty": "Sin notificaciones aún",
@@ -309,6 +330,218 @@
   "earningsDeliveries": "Entregas",
   "earningsRating": "Calificación",
 
+  "assignedTitle": "Pedidos Asignados",
+  "assignedTabAvailable": "Disponible",
+  "assignedTabAssigned": "Asignado",
+  "assignedTabScheduled": "Programado",
+  "assignedTabEmergency": "Emergencia",
+  "assignedTabDelivered": "Entregado",
+  "assignedOrderAccepted": "¡Pedido aceptado! Toca para iniciar la entrega.",
+  "assignedFailedLoad": "Error al cargar pedidos",
+  "assignedGoOnlineDesc": "Conéctate desde el Panel para ver los pedidos disponibles.",
+  "assignedNoNearby": "No se encontraron pedidos cercanos",
+  "assignedNoAssignedOrders": "No hay pedidos asignados todavía.",
+  "assignedNoScheduledOrders": "No hay pedidos programados todavía.",
+  "assignedNoEmergencyOrders": "No hay pedidos de emergencia todavía.",
+  "assignedNoDeliveredOrders": "No hay pedidos entregados todavía.",
+  "assignedWaitingGps": "Esperando ubicación GPS…",
+  "assignedShowingNearbyFallback": "Mostrando pedidos dentro de 25 km de tu ubicación (reserva).",
+  "assignedShowingNearbyConfigured": "Mostrando pedidos dentro de {count} área(s) de servicio configurada(s).",
+  "@assignedShowingNearbyConfigured": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "assignedSchedTime": "PROG: {time}",
+  "@assignedSchedTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "assignedSched": "PROG",
+  "assignedNew": "NUEVO",
+  "assignedFuelTypeFormat": "{qty} Gal {type}",
+  "@assignedFuelTypeFormat": {
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "assignedTagAvailable": "DISPONIBLE",
+  "assignedTagEmergency": "EMERGENCIA",
+  "assignedTagAssigned": "ASIGNADO",
+  "assignedTagDelivered": "ENTREGADO",
+  "assignedTagCompleted": "COMPLETADO",
+  "assignedFuelType": "Tipo de Combustible",
+  "assignedGo": "IR",
+  "assignedDetails": "Detalles",
+  "navGpsDisabled": "El GPS está Desactivado",
+  "navGpsDisabledDesc": "Por favor, activa los Servicios de Ubicación en la configuración de tu dispositivo.",
+  "navPermissionDenied": "Permiso de Ubicación Denegado",
+  "navPermissionDeniedDesc": "FuelDirect necesita acceso a la ubicación para navegar.",
+  "navOpenSettings": "Abrir Configuración",
+  "navCalculating": "Calc...",
+  "navMinutes": "{minutes} min",
+  "@navMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "String"
+      }
+    }
+  },
+  "navMiles": "{miles} mi",
+  "@navMiles": {
+    "placeholders": {
+      "miles": {
+        "type": "String"
+      }
+    }
+  },
+  "common_na": "N/D",
+  "navCustomerNotes": "NOTAS DEL CLIENTE",
+  "navNoInstructions": "No se proporcionaron instrucciones especiales.",
+  "navArrivedAtSource": "Llegado al Origen",
+  "navReleaseOrder": "Liberar Pedido",
+  "navReleasing": "Liberando…",
+  "navReleasePromptTitle": "¿Liberar Pedido?",
+  "navReleasePromptDesc": "¿Estás seguro de que deseas liberar este pedido?\n\nSe devolverá al grupo disponible y se reasignará a otro conductor.",
+  "navRelease": "Liberar",
+  "navReleaseSuccess": "Pedido liberado. Será reasignado.",
+  "navReleaseFailed": "Error al liberar el pedido: {error}",
+  "@navReleaseFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "common_goBack": "Volver",
+  "proofPhotoUploaded": "Foto subida correctamente ✅",
+  "proofUploadFailed": "Error al subir: {error}",
+  "@proofUploadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "proofTitle": "Prueba de Entrega",
+  "proofDispensingComplete": "Despacho Completado",
+  "proofDispensingCompleteDesc": "Captura el medidor de combustible e ingresa los galones entregados para completar el pedido.",
+  "proofMeterGaugePhoto": "FOTO DEL MEDIDOR",
+  "proofRetakePhoto": "Volver a tomar foto",
+  "proofManualEntry": "ENTRADA MANUAL",
+  "proofGallons": "GALONES",
+  "proofEstimatedTotal": "Total Estimado",
+  "proofPricePerGal": "a {price} / gal",
+  "@proofPricePerGal": {
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "proofMeterPhotoUploaded": "Foto del medidor subida",
+  "proofUploadingPhoto": "Subiendo foto…",
+  "proofTakeMeterPhoto": "Tomar foto del medidor (obligatorio)",
+  "proofGallonsEntered": "Galones ingresados: {qty}",
+  "@proofGallonsEntered": {
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      }
+    }
+  },
+  "proofEnterGallons": "Ingresar galones entregados (obligatorio)",
+  "proofSupervisorReviewDesc": "Las entradas manuales se marcan para la revisión del supervisor. Asegúrate de que la foto muestre claramente los dígitos del medidor que coincidan con la cantidad ingresada.",
+  "proofWaitUpload": "Por favor, espera a que la foto termine de subirse.",
+  "proofTakePhotoFirst": "Por favor, toma una foto del medidor de combustible primero.",
+  "proofEnterGallonsFirst": "Por favor, ingresa los galones entregados.",
+  "proofCompleteOrder": "Completar Pedido",
+  "proofWaitingImage": "Esperando imagen...",
+  "proofPhotoSaved": "Foto Guardada",
+  "proofTapToTakePhoto": "Toca para tomar foto del medidor",
+  "proofDigitsVisible": "Asegúrate de que los dígitos finales sean claramente visibles",
+  "proofCaptureFailed": "Error al capturar. Inténtalo de nuevo.",
+  "proofDebugCamera": "CÁMARA DE DEPURACIÓN",
+
+  "pickupTitle": "Recogida de Combustible",
+  "pickupDepotVerification": "Verificación del Depósito",
+  "pickupInProgress": "En Progreso",
+  "pickupArrivedAt": "Llegada al origen: {time}",
+  "@pickupArrivedAt": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "pickupOrderDetails": "DETALLES DEL PEDIDO",
+  "pickupOrderNumber": "Pedido #{id}",
+  "@pickupOrderNumber": {
+    "placeholders": {
+      "id": { "type": "String" }
+    }
+  },
+  "pickupNoAddress": "Dirección de entrega no disponible",
+  "pickupGeofenceConfirmed": "GEOCERCA CONFIRMADA",
+  "pickupSealTitle": "Número de Verificación del Sello del Tanque",
+  "pickupSealHint": "Ingrese solo números — sin letras ni caracteres especiales.",
+  "pickupSealEg": "ej. 12345678",
+  "pickupSealVerificationNote": "La verificación garantiza la integridad de la carga de combustible durante el transporte.",
+  "pickupFuelType": "Tipo de Combustible",
+  "pickupExpectedVolume": "Volumen Esperado",
+  "pickupTolerance": "TOLERANCIA: ±0.5%",
+  "pickupVolumeGal": "{volume} GAL",
+  "@pickupVolumeGal": {
+    "placeholders": {
+      "volume": { "type": "String" }
+    }
+  },
+  "pickupConfirmNote": "Al hacer clic en confirmar, verifica que ha inspeccionado las válvulas de seguridad y registrado el volumen correcto.",
+  "pickupConfirmStartTrip": "Confirmar e Iniciar Viaje",
+  "pickupEnterSeal": "Por favor ingrese el número del sello del tanque",
+  "pickupSealMinLength": "El número de sello debe tener al menos 4 dígitos",
+
+  "historyTitle": "Historial de Entregas",
+  "historyNoDeliveries": "Aún no hay entregas completadas.",
+  "historyCompleted": "Completado",
+  "historyError": "Error: {error}",
+  "@historyError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "historyFuelQty": "{fuelType} ({qty} Gal)",
+  "@historyFuelQty": {
+    "placeholders": {
+      "fuelType": { "type": "String" },
+      "qty": { "type": "String" }
+    }
+  },
+  "earningsToday": "Hoy",
+  "earningsYesterday": "Ayer",
+  "monthJan": "Ene",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Abr",
+  "monthMay": "May",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Ago",
+  "monthSep": "Sep",
+  "monthOct": "Oct",
+  "monthNov": "Nov",
+  "monthDec": "Dic",
+
   "common_cancel": "Cancelar",
   "common_confirm": "Confirmar",
   "common_save": "Guardar",
@@ -323,5 +556,301 @@
   "common_back": "Atrás",
   "common_next": "Siguiente",
   "common_submit": "Enviar",
-  "common_done": "Listo"
+  "common_done": "Listo",
+
+  "rtdLocating": "Localizando dirección de entrega\u2026",
+  "rtdDestMissing": "Ubicación de entrega no disponible",
+  "rtdAddressLabel": "Dirección: {address}",
+  "@rtdAddressLabel": {
+    "placeholders": { "address": { "type": "String" } }
+  },
+  "rtdNoAddress": "No hay dirección registrada para este pedido.",
+  "rtdRetry": "Reintentar",
+  "rtdDeliveringTo": "Entregando a",
+  "rtdEtaLabel": "ETA",
+  "rtdTimeLabel": "TIEMPO",
+  "rtdDistLabel": "DIST",
+  "rtdMin": "{mins} min",
+  "@rtdMin": {
+    "placeholders": { "mins": { "type": "String" } }
+  },
+  "rtdMiles": "{dist} millas",
+  "@rtdMiles": {
+    "placeholders": { "dist": { "type": "String" } }
+  },
+  "rtdCustomerLabel": "Cliente",
+  "rtdArrivedConfirm": "¡Llegué! Confirmar llegada",
+  "rtdArrivedAt": "Llegó al cliente",
+  "rtdNoPhone": "No hay número de teléfono disponible.",
+  "rtdCallError": "No se pudo iniciar el marcador telefónico. Verifique los permisos.",
+  "rtdArrivalFailed": "Error al actualizar la llegada: {error}",
+  "@rtdArrivalFailed": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "rtdGpsDisabled": "El GPS está desactivado",
+  "rtdGpsDisabledDesc": "Por favor, active los Servicios de Ubicación en la configuración de su dispositivo.",
+  "rtdOpenGps": "Abrir Configuración de GPS",
+  "rtdPermDenied": "Permiso de Ubicación Denegado",
+  "rtdPermDeniedDesc": "FuelDirect necesita acceso a la ubicación para navegar. Toque abajo para abrir la Configuración.",
+  "rtdOpenSettings": "Abrir Configuración",
+  "rtdGoBack": "Volver",
+
+  "orderSummaryTitle": "Resumen del Pedido",
+  "orderSummaryDeliveryDetails": "DETALLES DE ENTREGA",
+  "orderSummaryOrderId": "ID del Pedido",
+  "orderSummaryFuelType": "Tipo de Combustible",
+  "orderSummaryQuantity": "Cantidad",
+  "orderSummaryQuantityVal": "{qty} galones",
+  "@orderSummaryQuantityVal": {
+    "placeholders": { "qty": { "type": "String" } }
+  },
+  "orderSummaryDeliveryAddress": "Dirección de Entrega",
+  "orderSummaryScheduled": "Programado",
+  "orderSummaryPricingBreakdown": "DESGLOSE DE PRECIOS",
+  "orderSummaryFuelCost": "Costo de Combustible",
+  "orderSummaryDeliveryFee": "Tarifa de Entrega",
+  "orderSummaryServiceFee": "Tarifa de Servicio",
+  "orderSummaryTotal": "Total",
+  "orderSummaryStatus": "ESTADO",
+  "orderSummaryCurrentStatus": "Estado Actual",
+  "orderSummaryPaymentMethod": "Método de Pago",
+  "orderSummarySpecialInstructions": "INSTRUCCIONES ESPECIALES",
+  "orderSummaryNoInstructions": "No se proporcionaron instrucciones especiales.",
+  "orderSummaryUnavailable": "N/D",
+  "orderSummaryNotSet": "No establecido",
+  "orderSummaryFuelDetails": "Detalles del Combustible",
+  "orderSummaryPricePerGallon": "Precio por Galón",
+  "orderSummaryPriceVal": "{price}",
+  "@orderSummaryPriceVal": {
+    "placeholders": { "price": { "type": "String" } }
+  },
+  "orderSummaryFuelTotal": "Total de Combustible",
+  "orderSummaryFuelTotalVal": "{total}",
+  "@orderSummaryFuelTotalVal": {
+    "placeholders": { "total": { "type": "String" } }
+  },
+  "orderSummaryVehicle": "Vehículo",
+  "orderSummaryAddress": "Dirección",
+  "orderSummaryScheduledTime": "Hora Programada",
+  "orderSummaryNotScheduled": "No Programado",
+  "orderSummaryPaymentSummary": "Resumen de Pago",
+  "orderSummaryTotalDueToday": "Total a Pagar Hoy",
+  "orderSummaryDefaultPayment": "Pago predeterminado",
+  "orderSummaryChange": "Cambiar",
+  "orderSummaryLoginRequired": "Por favor inicie sesión para realizar un pedido",
+  "orderSummaryPlaceError": "Error al realizar el pedido: {error}",
+  "@orderSummaryPlaceError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "orderSummaryPlaceOrderButton": "Realizar Pedido - {total}",
+  "@orderSummaryPlaceOrderButton": {
+    "placeholders": { "total": { "type": "String" } }
+  },
+  "orderSummaryRegular": "Regular",
+  "orderSummaryPlaceholderVehicle": "Tesla Model 3",
+  "orderSummaryPlaceholderVehicleSub": "ABC 1234",
+  "orderSummaryPlaceholderAddress": "Inicio",
+  "orderSummaryPlaceholderAddressSub": "123 Main Street, San Francisco, CA 94102",
+
+  "orderHistoryTitle": "Historial de Pedidos",
+  "orderHistoryNoOrders": "No se encontraron pedidos completados.",
+  "orderHistoryError": "Error al cargar el historial: {error}",
+  "@orderHistoryError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "orderHistoryLoading": "Cargando...",
+  "orderHistorySearchHint": "Buscar por ubicación...",
+  "orderHistoryPlaceholderFuel": "Combustible",
+  "orderHistoryCardQty": "{fuelType} \u2022 {qty} Gal",
+  "@orderHistoryCardQty": {
+    "placeholders": {
+      "fuelType": { "type": "String" },
+      "qty": { "type": "String" }
+    }
+  },
+
+  "orderDetailsTitle": "Detalles del Pedido",
+  "orderDetailsOrderNumber": "Pedido #{id}",
+  "@orderDetailsOrderNumber": {
+    "placeholders": { "id": { "type": "String" } }
+  },
+  "orderDetailsStatus": "Estado",
+  "orderDetailsFuelType": "Tipo de Combustible",
+  "orderDetailsQuantity": "Cantidad",
+  "orderDetailsAddress": "Dirección de Entrega",
+  "orderDetailsTotal": "Total",
+  "orderDetailsScheduled": "Programado",
+  "orderDetailsPaymentMethod": "Método de Pago",
+  "orderDetailsCustomer": "Cliente",
+  "orderDetailsSpecialInstructions": "Instrucciones Especiales",
+  "orderDetailsNoInstructions": "Ninguna",
+  "orderDetailsGallons": "{qty} Gal",
+  "@orderDetailsGallons": {
+    "placeholders": { "qty": { "type": "String" } }
+  },
+  "orderDetailsNoContactInfo": "Sin información de contacto",
+  "orderDetailsChatUnavailable": "Información del cliente no disponible para chat.",
+  "orderDetailsOrderTotal": "TOTAL DEL PEDIDO",
+  "orderDetailsCompletedCheck": "Completado \u2713",
+  "orderDetailsPending": "Pendiente",
+  "orderDetailsScheduledDeliveryHeader": "ENTREGA PROGRAMADA",
+  "orderDetailsCustomerNotesHeader": "NOTAS DEL CLIENTE",
+  "orderDetailsNoInstructionsDesc": "No se proporcionaron instrucciones especiales.",
+  "orderDetailsDeliveryLocationHeader": "UBICACIÓN DE ENTREGA",
+  "orderDetailsNavigate": "Navegar",
+  "orderDetailsOrderTimelineHeader": "CRONOLOGÍA DEL PEDIDO",
+  "orderDetailsTimelinePlaced": "Pedido Realizado",
+  "orderDetailsTimelineAccepted": "Pedido Aceptado",
+  "orderDetailsTimelineArrived": "Conductor Llegó",
+  "orderDetailsTimelineCompleted": "Pedido Completado",
+  "orderDetailsScheduledError": "Este pedido está programado para más tarde. Solo puede iniciarlo 1 hora antes de la hora programada.",
+  "orderDetailsJourneyStarted": "¡Viaje de entrega iniciado! \ud83d\ude80",
+  "orderDetailsJourneyStartedBody": "Dirigiéndose a la ubicación de origen para la recogida.",
+  "orderDetailsStartJourney": "Iniciar viaje de entrega",
+  "orderDetailsEmergencyFlagged": "¡Pedido marcado como Emergencia! 🚨",
+  "orderDetailsAssignedFlagged": "Pedido movido de nuevo a Asignado.",
+  "orderDetailsEmergencyTooltip": "Marcar como Emergencia",
+
+  "notificationsTitle": "Notificaciones",
+  "notificationsEmpty": "No hay notificaciones aún.",
+  "notificationsMarkRead": "Marcar todas como leídas",
+
+  "safetyTitle": "Cumplimiento de Seguridad",
+  "safetyCheckAll": "Marcar todos los elementos",
+  "safetyConfirm": "Confirmar Control de Seguridad",
+  "safetyItem1": "Verificar la presión del tanque de combustible",
+  "safetyItem2": "Inspeccionar las conexiones de la manguera",
+  "safetyItem3": "Verificar que el tipo de combustible coincida con el pedido",
+  "safetyItem4": "Revisar la válvula de cierre de emergencia",
+  "safetyItem5": "Confirmar que el EPP esté colocado",
+  "safetyAllRequired": "Por favor complete todas las comprobaciones de seguridad antes de confirmar.",
+
+  "selectLocationTitle": "Confirmar Ubicación",
+  "selectLocationSearchHint": "Buscar una ubicación diferente..",
+  "selectLocationCurrentSelection": "SELECCIÓN ACTUAL",
+  "selectLocationEstimatedWait": "ESPERA ESTIMADA",
+  "selectLocationServiceFee": "TARIFA DE SERVICIO",
+  "selectLocationConfirmOrder": "Confirmar Pedido",
+  "selectLocationPlaceholderAddress": "123 Innovation Drive",
+  "selectLocationPlaceholderCity": "San Francisco, CA 94105",
+  "selectLocationPlaceholderWait": "15-20 mins",
+  "selectLocationPlaceholderFee": "$4.99",
+  "selectLocationPlaceholderFullAddress": "123 Innovation Drive, San Francisco, CA 94105",
+
+  "deliveryCompleteTitle": "Entrega Completada",
+  "deliveryCompleteSubtitle": "¡Pedido entregado con éxito!",
+  "deliveryCompleteBackHome": "Volver al Inicio",
+  "deliveryCompleteRating": "Calificar esta entrega",
+
+  "scheduleDeliveryTitle": "Programar Entrega",
+  "scheduleDeliveryDate": "Seleccionar Fecha",
+  "scheduleDeliveryTime": "Seleccionar Hora",
+  "scheduleDeliveryConfirm": "Confirmar Programación",
+  "scheduleDeliveryNoSlots": "No hay horarios disponibles.",
+
+  "notificationsMarkAllReadSuccess": "Todas las notificaciones marcadas como leídas",
+  "notificationsFilterAll": "Todas",
+  "notificationsFilterUnread": "No leídas",
+  "notificationsFilterOrder": "Pedidos",
+  "notificationsNoFilterNotifications": "Sin notificaciones de tipo {filter}",
+  "@notificationsNoFilterNotifications": {
+    "placeholders": {
+      "filter": { "type": "String" }
+    }
+  },
+  "notificationsDefaultTitle": "Notificación",
+
+  "earningsOverviewTitle": "Resumen de Ganancias",
+  "earningsWalletBalance": "SALDO DE BILLETERA",
+  "earningsTodayCaps": "HOY",
+  "earningsActionRequired": "Acción Requerida",
+  "earningsStripeLinkBankDesc": "Por favor vincule su cuenta bancaria a través de Stripe para habilitar pagos.",
+  "earningsLinkBankAccount": "Vincular Cuenta Bancaria",
+  "earningsWeeklyPerformance": "RENDIMIENTO SEMANAL",
+  "earningsThisWeek": "Esta semana",
+  "earningsTotalDeliveriesCaps": "TOTAL DE ENTREGAS",
+  "earningsRecentDeliveries": "Entregas Recientes",
+  "earningsSeeAll": "Ver todo",
+  "earningsNoDeliveriesToday": "Aún no hay entregas hoy.",
+  "earningsCashOutNow": "Cobrar Ahora",
+  "earningsCashOut": "Retirar Fondos",
+  "earningsAvailableAmount": "Disponible: {amount}",
+  "@earningsAvailableAmount": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "earningsAmountHint": "Ingrese monto",
+  "earningsConfirm": "Confirmar",
+  "earningsEnterValidAmount": "Por favor ingrese un monto válido",
+  "earningsInsufficientBalance": "Saldo insuficiente",
+  "earningsStripeErrorInsufficient": "Error de Stripe: Fondos disponibles insuficientes en su cuenta.",
+  "earningsOnboardingLinkError": "No se pudo abrir el enlace de incorporación.",
+  "earningsGeneratingLinkFailed": "Error al generar el enlace de incorporación.",
+
+  "fuelTitle": "Combustible",
+  "fuelTypes": "Tipos de Combustible",
+  "fuelPetrol": "Gasolina",
+  "fuelDiesel": "Diésel",
+  "fuelOctanePremium": "Octano 95 Premium",
+  "fuelUltraLowSulfur": "Ultra Bajo Azufre",
+  "fuelQuantity": "Cantidad",
+  "fuelApproxRange": "Alcance aprox: 400 millas",
+  "fuelFullTank": "Tanque Lleno",
+  "fuelConfirmOrder": "Confirmar Pedido",
+
+  "deliveryProofCameraError": "Error de cámara: {error}",
+  "@deliveryProofCameraError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "deliveryProofInitError": "Error de inicio: {error}",
+  "@deliveryProofInitError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+
+  "meterPreviewUploadFailed": "Error al subir: {error}",
+  "@meterPreviewUploadFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+
+  "meterVerificationCameraError": "Error de cámara: {error}",
+  "@meterVerificationCameraError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "meterVerificationCaptureFailed": "Error al tomar la foto. Por favor intente de nuevo.",
+
+  "orderDetailsError": "Error: {error}",
+  "@orderDetailsError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+
+  "orderTrackingGoBack": "Volver",
+
+  "paymentCouponHint": "Ingresar código de cupón",
+  "paymentAddNoteHint": "Agregar nota",
+  "paymentButtonLabel": "Aplicar",
+  "paymentHaveCoupon": "¿Tiene un cupón?",
+
+  "rtdCustomer": "Cliente",
+
+  "safetyNoPhone": "No hay número de teléfono disponible.",
+  "safetyCallError": "No se pudo abrir el marcador telefónico.",
+
+  "safetySaving": "Guardando…",
+  "safetyError": "Error: {error}",
+  "@safetyError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  }
 }

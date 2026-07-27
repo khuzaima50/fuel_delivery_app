@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'real_time_delivery_screen.dart';
 
 class FuelPickupScreen extends StatefulWidget {
@@ -39,16 +40,17 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
   }
 
   Future<void> _confirmAndStartTrip() async {
+    final l10n = AppLocalizations.of(context)!;
     final sealNum = _sealController.text.trim();
     if (sealNum.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the tank seal number')),
+        SnackBar(content: Text(l10n.pickupEnterSeal)),
       );
       return;
     }
     if (sealNum.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seal number must be at least 4 digits')),
+        SnackBar(content: Text(l10n.pickupSealMinLength)),
       );
       return;
     }
@@ -89,7 +91,8 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final fuelType = widget.order?['fuel_type'] ?? 'Unknown Fuel Type';
+    final l10n = AppLocalizations.of(context)!;
+    final fuelType = widget.order?['fuel_type'] ?? l10n.dashboardNoGps;
     final volume = (widget.order?['fuel_quantity'] ?? widget.order?['fuel_quantity_gallons'])?.toString() ?? '—';
     final orderId = widget.order?['id']?.toString() ?? '—';
     final shortId = orderId.length > 8 ? orderId.substring(0, 8).toUpperCase() : orderId.toUpperCase();
@@ -122,9 +125,9 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
             ),
           ),
         ),
-        title: const Text(
-          'Fuel Pickup',
-          style: TextStyle(
+        title: Text(
+          l10n.pickupTitle,
+          style: const TextStyle(
             color: Color(0xFF1F1F1F),
             fontSize: 18,
             fontWeight: FontWeight.w800,
@@ -151,18 +154,18 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
+                      children: [
                         Text(
-                          'Depot Verification',
-                          style: TextStyle(
+                          l10n.pickupDepotVerification,
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF1F1F1F),
                           ),
                         ),
                         Text(
-                          'In Progress',
-                          style: TextStyle(
+                          l10n.pickupInProgress,
+                          style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFFFF4D00),
                             fontWeight: FontWeight.w700,
@@ -184,7 +187,7 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Arrived at Source: $_arrivedAtStr',
+                      l10n.pickupArrivedAt(_arrivedAtStr),
                       style: const TextStyle(
                         fontSize: 13,
                         color: Color(0xFF888888),
@@ -197,9 +200,9 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
               ),
               const SizedBox(height: 24),
 
-              const Text(
-                'ORDER DETAILS',
-                style: TextStyle(
+              Text(
+                l10n.pickupOrderDetails,
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF888888),
@@ -221,7 +224,7 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Order #$shortId',
+                      l10n.pickupOrderNumber(shortId),
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
@@ -230,7 +233,7 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.order?['delivery_address'] ?? 'Delivery address not available',
+                      widget.order?['delivery_address'] ?? l10n.pickupNoAddress,
                       style: const TextStyle(
                         fontSize: 13,
                         color: Color(0xFF888888),
@@ -251,9 +254,9 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          'GEOFENCE CONFIRMED',
-                          style: TextStyle(
+                        Text(
+                          l10n.pickupGeofenceConfirmed,
+                          style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF00D18F),
@@ -269,18 +272,18 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
               const SizedBox(height: 24),
 
               // Tank Seal Number Input
-              const Text(
-                'Tank Seal Check Number',
-                style: TextStyle(
+              Text(
+                l10n.pickupSealTitle,
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                   color: Color(0xFF333333),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Enter numbers only — no letters or special characters.',
-                style: TextStyle(
+              Text(
+                l10n.pickupSealHint,
+                style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFF888888),
                   fontWeight: FontWeight.w500,
@@ -306,9 +309,9 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     FilteringTextInputFormatter.digitsOnly, // only digits allowed
                     LengthLimitingTextInputFormatter(12),
                   ],
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. 12345678',
-                    hintStyle: TextStyle(
+                  decoration: InputDecoration(
+                    hintText: l10n.pickupSealEg,
+                    hintStyle: const TextStyle(
                       color: Color(0xFFAAAAAA),
                       fontSize: 14,
                     ),
@@ -317,9 +320,9 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Verification ensures the integrity of the fuel cargo during transport.',
-                style: TextStyle(
+              Text(
+                l10n.pickupSealVerificationNote,
+                style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFF888888),
                   fontWeight: FontWeight.w500,
@@ -341,9 +344,9 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Fuel Type',
-                          style: TextStyle(
+                        Text(
+                          l10n.pickupFuelType,
+                          style: const TextStyle(
                             fontSize: 14,
                             color: Color(0xFF888888),
                             fontWeight: FontWeight.w500,
@@ -365,16 +368,16 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Expected Volume',
-                          style: TextStyle(
+                        Text(
+                          l10n.pickupExpectedVolume,
+                          style: const TextStyle(
                             fontSize: 14,
                             color: Color(0xFF888888),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
-                          '$volume GAL',
+                          l10n.pickupVolumeGal(volume),
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
@@ -383,11 +386,11 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                         ),
                       ],
                     ),
-                    const Align(
+                    Align(
                       alignment: Alignment.centerRight,
                       child: Text(
-                        'TOLERANCE: ±0.5%',
-                        style: TextStyle(
+                        l10n.pickupTolerance,
+                        style: const TextStyle(
                           fontSize: 10,
                           color: Color(0xFFAAAAAA),
                           fontWeight: FontWeight.w700,
@@ -427,17 +430,17 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
             ),
             const SizedBox(height: 16),
             Row(
-              children: const [
-                Icon(
+              children: [
+                const Icon(
                   Icons.warning_amber_rounded,
                   color: Color(0xFFFFB800),
                   size: 18,
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'By clicking confirm, you verify that you have inspected the safety valves and recorded the correct volume.',
-                    style: TextStyle(
+                    l10n.pickupConfirmNote,
+                    style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFF888888),
                       fontWeight: FontWeight.w500,
@@ -466,12 +469,12 @@ class _FuelPickupScreenState extends State<FuelPickupScreen> {
                     ? const CircularProgressIndicator(color: Colors.white)
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.local_shipping, size: 20),
-                          SizedBox(width: 10),
+                        children: [
+                          const Icon(Icons.local_shipping, size: 20),
+                          const SizedBox(width: 10),
                           Text(
-                            'Confirm & Start Trip',
-                            style: TextStyle(
+                            l10n.pickupConfirmStartTrip,
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                             ),

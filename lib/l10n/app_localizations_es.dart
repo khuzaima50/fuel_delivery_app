@@ -750,10 +750,35 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatNoMessages => 'Sin mensajes aún. ¡Inicia la conversación!';
 
   @override
+  String chatSendError(String error) {
+    return 'Error al enviar: $error';
+  }
+
+  @override
+  String chatError(String error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get chatToday => 'Hoy';
+
+  @override
+  String get chatYesterday => 'Ayer';
+
+  @override
+  String get chatCustomer => 'Cliente';
+
+  @override
+  String get chatNoMessagesTitle => 'Sin mensajes aún';
+
+  @override
+  String get chatNoMessagesSubtitle => 'Inicia la conversación abajo';
+
+  @override
   String get notificationsTitle => 'Notificaciones';
 
   @override
-  String get notificationsEmpty => 'Sin notificaciones aún';
+  String get notificationsEmpty => 'No hay notificaciones aún.';
 
   @override
   String get notificationsEmptyDesc =>
@@ -791,6 +816,395 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get earningsRating => 'Calificación';
+
+  @override
+  String get assignedTitle => 'Pedidos Asignados';
+
+  @override
+  String get assignedTabAvailable => 'Disponible';
+
+  @override
+  String get assignedTabAssigned => 'Asignado';
+
+  @override
+  String get assignedTabScheduled => 'Programado';
+
+  @override
+  String get assignedTabEmergency => 'Emergencia';
+
+  @override
+  String get assignedTabDelivered => 'Entregado';
+
+  @override
+  String get assignedOrderAccepted =>
+      '¡Pedido aceptado! Toca para iniciar la entrega.';
+
+  @override
+  String get assignedFailedLoad => 'Error al cargar pedidos';
+
+  @override
+  String get assignedGoOnlineDesc =>
+      'Conéctate desde el Panel para ver los pedidos disponibles.';
+
+  @override
+  String get assignedNoNearby => 'No se encontraron pedidos cercanos';
+
+  @override
+  String get assignedNoAssignedOrders => 'No hay pedidos asignados todavía.';
+
+  @override
+  String get assignedNoScheduledOrders => 'No hay pedidos programados todavía.';
+
+  @override
+  String get assignedNoEmergencyOrders =>
+      'No hay pedidos de emergencia todavía.';
+
+  @override
+  String get assignedNoDeliveredOrders => 'No hay pedidos entregados todavía.';
+
+  @override
+  String get assignedWaitingGps => 'Esperando ubicación GPS…';
+
+  @override
+  String get assignedShowingNearbyFallback =>
+      'Mostrando pedidos dentro de 25 km de tu ubicación (reserva).';
+
+  @override
+  String assignedShowingNearbyConfigured(int count) {
+    return 'Mostrando pedidos dentro de $count área(s) de servicio configurada(s).';
+  }
+
+  @override
+  String assignedSchedTime(String time) {
+    return 'PROG: $time';
+  }
+
+  @override
+  String get assignedSched => 'PROG';
+
+  @override
+  String get assignedNew => 'NUEVO';
+
+  @override
+  String assignedFuelTypeFormat(String qty, String type) {
+    return '$qty Gal $type';
+  }
+
+  @override
+  String get assignedTagAvailable => 'DISPONIBLE';
+
+  @override
+  String get assignedTagEmergency => 'EMERGENCIA';
+
+  @override
+  String get assignedTagAssigned => 'ASIGNADO';
+
+  @override
+  String get assignedTagDelivered => 'ENTREGADO';
+
+  @override
+  String get assignedTagCompleted => 'COMPLETADO';
+
+  @override
+  String get assignedFuelType => 'Tipo de Combustible';
+
+  @override
+  String get assignedGo => 'IR';
+
+  @override
+  String get assignedDetails => 'Detalles';
+
+  @override
+  String get navGpsDisabled => 'El GPS está Desactivado';
+
+  @override
+  String get navGpsDisabledDesc =>
+      'Por favor, activa los Servicios de Ubicación en la configuración de tu dispositivo.';
+
+  @override
+  String get navPermissionDenied => 'Permiso de Ubicación Denegado';
+
+  @override
+  String get navPermissionDeniedDesc =>
+      'FuelDirect necesita acceso a la ubicación para navegar.';
+
+  @override
+  String get navOpenSettings => 'Abrir Configuración';
+
+  @override
+  String get navCalculating => 'Calc...';
+
+  @override
+  String navMinutes(String minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String navMiles(String miles) {
+    return '$miles mi';
+  }
+
+  @override
+  String get common_na => 'N/D';
+
+  @override
+  String get navCustomerNotes => 'NOTAS DEL CLIENTE';
+
+  @override
+  String get navNoInstructions =>
+      'No se proporcionaron instrucciones especiales.';
+
+  @override
+  String get navArrivedAtSource => 'Llegado al Origen';
+
+  @override
+  String get navReleaseOrder => 'Liberar Pedido';
+
+  @override
+  String get navReleasing => 'Liberando…';
+
+  @override
+  String get navReleasePromptTitle => '¿Liberar Pedido?';
+
+  @override
+  String get navReleasePromptDesc =>
+      '¿Estás seguro de que deseas liberar este pedido?\n\nSe devolverá al grupo disponible y se reasignará a otro conductor.';
+
+  @override
+  String get navRelease => 'Liberar';
+
+  @override
+  String get navReleaseSuccess => 'Pedido liberado. Será reasignado.';
+
+  @override
+  String navReleaseFailed(String error) {
+    return 'Error al liberar el pedido: $error';
+  }
+
+  @override
+  String get common_goBack => 'Volver';
+
+  @override
+  String get proofPhotoUploaded => 'Foto subida correctamente ✅';
+
+  @override
+  String proofUploadFailed(String error) {
+    return 'Error al subir: $error';
+  }
+
+  @override
+  String get proofTitle => 'Prueba de Entrega';
+
+  @override
+  String get proofDispensingComplete => 'Despacho Completado';
+
+  @override
+  String get proofDispensingCompleteDesc =>
+      'Captura el medidor de combustible e ingresa los galones entregados para completar el pedido.';
+
+  @override
+  String get proofMeterGaugePhoto => 'FOTO DEL MEDIDOR';
+
+  @override
+  String get proofRetakePhoto => 'Volver a tomar foto';
+
+  @override
+  String get proofManualEntry => 'ENTRADA MANUAL';
+
+  @override
+  String get proofGallons => 'GALONES';
+
+  @override
+  String get proofEstimatedTotal => 'Total Estimado';
+
+  @override
+  String proofPricePerGal(String price) {
+    return 'a $price / gal';
+  }
+
+  @override
+  String get proofMeterPhotoUploaded => 'Foto del medidor subida';
+
+  @override
+  String get proofUploadingPhoto => 'Subiendo foto…';
+
+  @override
+  String get proofTakeMeterPhoto => 'Tomar foto del medidor (obligatorio)';
+
+  @override
+  String proofGallonsEntered(String qty) {
+    return 'Galones ingresados: $qty';
+  }
+
+  @override
+  String get proofEnterGallons => 'Ingresar galones entregados (obligatorio)';
+
+  @override
+  String get proofSupervisorReviewDesc =>
+      'Las entradas manuales se marcan para la revisión del supervisor. Asegúrate de que la foto muestre claramente los dígitos del medidor que coincidan con la cantidad ingresada.';
+
+  @override
+  String get proofWaitUpload =>
+      'Por favor, espera a que la foto termine de subirse.';
+
+  @override
+  String get proofTakePhotoFirst =>
+      'Por favor, toma una foto del medidor de combustible primero.';
+
+  @override
+  String get proofEnterGallonsFirst =>
+      'Por favor, ingresa los galones entregados.';
+
+  @override
+  String get proofCompleteOrder => 'Completar Pedido';
+
+  @override
+  String get proofWaitingImage => 'Esperando imagen...';
+
+  @override
+  String get proofPhotoSaved => 'Foto Guardada';
+
+  @override
+  String get proofTapToTakePhoto => 'Toca para tomar foto del medidor';
+
+  @override
+  String get proofDigitsVisible =>
+      'Asegúrate de que los dígitos finales sean claramente visibles';
+
+  @override
+  String get proofCaptureFailed => 'Error al capturar. Inténtalo de nuevo.';
+
+  @override
+  String get proofDebugCamera => 'CÁMARA DE DEPURACIÓN';
+
+  @override
+  String get historyTitle => 'Historial de Entregas';
+
+  @override
+  String get historyNoDeliveries => 'Aún no hay entregas completadas.';
+
+  @override
+  String get historyCompleted => 'Completado';
+
+  @override
+  String historyError(String error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String historyFuelQty(String fuelType, String qty) {
+    return '$fuelType ($qty Gal)';
+  }
+
+  @override
+  String get earningsYesterday => 'Ayer';
+
+  @override
+  String get monthJan => 'Ene';
+
+  @override
+  String get monthFeb => 'Feb';
+
+  @override
+  String get monthMar => 'Mar';
+
+  @override
+  String get monthApr => 'Abr';
+
+  @override
+  String get monthMay => 'May';
+
+  @override
+  String get monthJun => 'Jun';
+
+  @override
+  String get monthJul => 'Jul';
+
+  @override
+  String get monthAug => 'Ago';
+
+  @override
+  String get monthSep => 'Sep';
+
+  @override
+  String get monthOct => 'Oct';
+
+  @override
+  String get monthNov => 'Nov';
+
+  @override
+  String get monthDec => 'Dic';
+
+  @override
+  String get pickupTitle => 'Recogida de Combustible';
+
+  @override
+  String get pickupDepotVerification => 'Verificación del Depósito';
+
+  @override
+  String get pickupInProgress => 'En Progreso';
+
+  @override
+  String pickupArrivedAt(String time) {
+    return 'Llegada al origen: $time';
+  }
+
+  @override
+  String get pickupOrderDetails => 'DETALLES DEL PEDIDO';
+
+  @override
+  String pickupOrderNumber(String id) {
+    return 'Pedido #$id';
+  }
+
+  @override
+  String get pickupNoAddress => 'Dirección de entrega no disponible';
+
+  @override
+  String get pickupGeofenceConfirmed => 'GEOCERCA CONFIRMADA';
+
+  @override
+  String get pickupSealTitle => 'Número de Verificación del Sello del Tanque';
+
+  @override
+  String get pickupSealHint =>
+      'Ingrese solo números — sin letras ni caracteres especiales.';
+
+  @override
+  String get pickupSealEg => 'ej. 12345678';
+
+  @override
+  String get pickupSealVerificationNote =>
+      'La verificación garantiza la integridad de la carga de combustible durante el transporte.';
+
+  @override
+  String get pickupFuelType => 'Tipo de Combustible';
+
+  @override
+  String get pickupExpectedVolume => 'Volumen Esperado';
+
+  @override
+  String get pickupTolerance => 'TOLERANCIA: ±0.5%';
+
+  @override
+  String pickupVolumeGal(String volume) {
+    return '$volume GAL';
+  }
+
+  @override
+  String get pickupConfirmNote =>
+      'Al hacer clic en confirmar, verifica que ha inspeccionado las válvulas de seguridad y registrado el volumen correcto.';
+
+  @override
+  String get pickupConfirmStartTrip => 'Confirmar e Iniciar Viaje';
+
+  @override
+  String get pickupEnterSeal =>
+      'Por favor ingrese el número del sello del tanque';
+
+  @override
+  String get pickupSealMinLength =>
+      'El número de sello debe tener al menos 4 dígitos';
 
   @override
   String get common_cancel => 'Cancelar';
@@ -836,4 +1250,637 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get common_done => 'Listo';
+
+  @override
+  String get rtdLocating => 'Localizando dirección de entrega…';
+
+  @override
+  String get rtdDestMissing => 'Ubicación de entrega no disponible';
+
+  @override
+  String rtdAddressLabel(String address) {
+    return 'Dirección: $address';
+  }
+
+  @override
+  String get rtdNoAddress => 'No hay dirección registrada para este pedido.';
+
+  @override
+  String get rtdRetry => 'Reintentar';
+
+  @override
+  String get rtdDeliveringTo => 'Entregando a';
+
+  @override
+  String get rtdEtaLabel => 'ETA';
+
+  @override
+  String get rtdTimeLabel => 'TIEMPO';
+
+  @override
+  String get rtdDistLabel => 'DIST';
+
+  @override
+  String rtdMin(String mins) {
+    return '$mins min';
+  }
+
+  @override
+  String rtdMiles(String dist) {
+    return '$dist millas';
+  }
+
+  @override
+  String get rtdCustomerLabel => 'Cliente';
+
+  @override
+  String get rtdArrivedConfirm => '¡Llegué! Confirmar llegada';
+
+  @override
+  String get rtdArrivedAt => 'Llegó al cliente';
+
+  @override
+  String get rtdNoPhone => 'No hay número de teléfono disponible.';
+
+  @override
+  String get rtdCallError =>
+      'No se pudo iniciar el marcador telefónico. Verifique los permisos.';
+
+  @override
+  String rtdArrivalFailed(String error) {
+    return 'Error al actualizar la llegada: $error';
+  }
+
+  @override
+  String get rtdGpsDisabled => 'El GPS está desactivado';
+
+  @override
+  String get rtdGpsDisabledDesc =>
+      'Por favor, active los Servicios de Ubicación en la configuración de su dispositivo.';
+
+  @override
+  String get rtdOpenGps => 'Abrir Configuración de GPS';
+
+  @override
+  String get rtdPermDenied => 'Permiso de Ubicación Denegado';
+
+  @override
+  String get rtdPermDeniedDesc =>
+      'FuelDirect necesita acceso a la ubicación para navegar. Toque abajo para abrir la Configuración.';
+
+  @override
+  String get rtdOpenSettings => 'Abrir Configuración';
+
+  @override
+  String get rtdGoBack => 'Volver';
+
+  @override
+  String get orderSummaryTitle => 'Resumen del Pedido';
+
+  @override
+  String get orderSummaryDeliveryDetails => 'DETALLES DE ENTREGA';
+
+  @override
+  String get orderSummaryOrderId => 'ID del Pedido';
+
+  @override
+  String get orderSummaryFuelType => 'Tipo de Combustible';
+
+  @override
+  String get orderSummaryQuantity => 'Cantidad';
+
+  @override
+  String orderSummaryQuantityVal(String qty) {
+    return '$qty galones';
+  }
+
+  @override
+  String get orderSummaryDeliveryAddress => 'Dirección de Entrega';
+
+  @override
+  String get orderSummaryScheduled => 'Programado';
+
+  @override
+  String get orderSummaryPricingBreakdown => 'DESGLOSE DE PRECIOS';
+
+  @override
+  String get orderSummaryFuelCost => 'Costo de Combustible';
+
+  @override
+  String get orderSummaryDeliveryFee => 'Tarifa de Entrega';
+
+  @override
+  String get orderSummaryServiceFee => 'Tarifa de Servicio';
+
+  @override
+  String get orderSummaryTotal => 'Total';
+
+  @override
+  String get orderSummaryStatus => 'ESTADO';
+
+  @override
+  String get orderSummaryCurrentStatus => 'Estado Actual';
+
+  @override
+  String get orderSummaryPaymentMethod => 'Método de Pago';
+
+  @override
+  String get orderSummarySpecialInstructions => 'INSTRUCCIONES ESPECIALES';
+
+  @override
+  String get orderSummaryNoInstructions =>
+      'No se proporcionaron instrucciones especiales.';
+
+  @override
+  String get orderSummaryUnavailable => 'N/D';
+
+  @override
+  String get orderSummaryNotSet => 'No establecido';
+
+  @override
+  String get orderSummaryFuelDetails => 'Detalles del Combustible';
+
+  @override
+  String get orderSummaryPricePerGallon => 'Precio por Galón';
+
+  @override
+  String orderSummaryPriceVal(String price) {
+    return '$price';
+  }
+
+  @override
+  String get orderSummaryFuelTotal => 'Total de Combustible';
+
+  @override
+  String orderSummaryFuelTotalVal(String total) {
+    return '$total';
+  }
+
+  @override
+  String get orderSummaryVehicle => 'Vehículo';
+
+  @override
+  String get orderSummaryAddress => 'Dirección';
+
+  @override
+  String get orderSummaryScheduledTime => 'Hora Programada';
+
+  @override
+  String get orderSummaryNotScheduled => 'No Programado';
+
+  @override
+  String get orderSummaryPaymentSummary => 'Resumen de Pago';
+
+  @override
+  String get orderSummaryTotalDueToday => 'Total a Pagar Hoy';
+
+  @override
+  String get orderSummaryDefaultPayment => 'Pago predeterminado';
+
+  @override
+  String get orderSummaryChange => 'Cambiar';
+
+  @override
+  String get orderSummaryLoginRequired =>
+      'Por favor inicie sesión para realizar un pedido';
+
+  @override
+  String orderSummaryPlaceError(String error) {
+    return 'Error al realizar el pedido: $error';
+  }
+
+  @override
+  String orderSummaryPlaceOrderButton(String total) {
+    return 'Realizar Pedido - $total';
+  }
+
+  @override
+  String get orderSummaryRegular => 'Regular';
+
+  @override
+  String get orderSummaryPlaceholderVehicle => 'Tesla Model 3';
+
+  @override
+  String get orderSummaryPlaceholderVehicleSub => 'ABC 1234';
+
+  @override
+  String get orderSummaryPlaceholderAddress => 'Inicio';
+
+  @override
+  String get orderSummaryPlaceholderAddressSub =>
+      '123 Main Street, San Francisco, CA 94102';
+
+  @override
+  String get orderHistoryNoOrders => 'No se encontraron pedidos completados.';
+
+  @override
+  String orderHistoryError(String error) {
+    return 'Error al cargar el historial: $error';
+  }
+
+  @override
+  String get orderHistoryLoading => 'Cargando...';
+
+  @override
+  String get orderHistorySearchHint => 'Buscar por ubicación...';
+
+  @override
+  String get orderHistoryPlaceholderFuel => 'Combustible';
+
+  @override
+  String orderHistoryCardQty(String fuelType, String qty) {
+    return '$fuelType • $qty Gal';
+  }
+
+  @override
+  String get orderDetailsTitle => 'Detalles del Pedido';
+
+  @override
+  String orderDetailsOrderNumber(String id) {
+    return 'Pedido #$id';
+  }
+
+  @override
+  String get orderDetailsStatus => 'Estado';
+
+  @override
+  String get orderDetailsFuelType => 'Tipo de Combustible';
+
+  @override
+  String get orderDetailsQuantity => 'Cantidad';
+
+  @override
+  String get orderDetailsAddress => 'Dirección de Entrega';
+
+  @override
+  String get orderDetailsTotal => 'Total';
+
+  @override
+  String get orderDetailsScheduled => 'Programado';
+
+  @override
+  String get orderDetailsPaymentMethod => 'Método de Pago';
+
+  @override
+  String get orderDetailsCustomer => 'Cliente';
+
+  @override
+  String get orderDetailsSpecialInstructions => 'Instrucciones Especiales';
+
+  @override
+  String get orderDetailsNoInstructions => 'Ninguna';
+
+  @override
+  String orderDetailsGallons(String qty) {
+    return '$qty Gal';
+  }
+
+  @override
+  String get orderDetailsNoContactInfo => 'Sin información de contacto';
+
+  @override
+  String get orderDetailsChatUnavailable =>
+      'Información del cliente no disponible para chat.';
+
+  @override
+  String get orderDetailsOrderTotal => 'TOTAL DEL PEDIDO';
+
+  @override
+  String get orderDetailsCompletedCheck => 'Completado ✓';
+
+  @override
+  String get orderDetailsPending => 'Pendiente';
+
+  @override
+  String get orderDetailsScheduledDeliveryHeader => 'ENTREGA PROGRAMADA';
+
+  @override
+  String get orderDetailsCustomerNotesHeader => 'NOTAS DEL CLIENTE';
+
+  @override
+  String get orderDetailsNoInstructionsDesc =>
+      'No se proporcionaron instrucciones especiales.';
+
+  @override
+  String get orderDetailsDeliveryLocationHeader => 'UBICACIÓN DE ENTREGA';
+
+  @override
+  String get orderDetailsNavigate => 'Navegar';
+
+  @override
+  String get orderDetailsOrderTimelineHeader => 'CRONOLOGÍA DEL PEDIDO';
+
+  @override
+  String get orderDetailsTimelinePlaced => 'Pedido Realizado';
+
+  @override
+  String get orderDetailsTimelineAccepted => 'Pedido Aceptado';
+
+  @override
+  String get orderDetailsTimelineArrived => 'Conductor Llegó';
+
+  @override
+  String get orderDetailsTimelineCompleted => 'Pedido Completado';
+
+  @override
+  String get orderDetailsScheduledError =>
+      'Este pedido está programado para más tarde. Solo puede iniciarlo 1 hora antes de la hora programada.';
+
+  @override
+  String get orderDetailsJourneyStarted => '¡Viaje de entrega iniciado! 🚀';
+
+  @override
+  String get orderDetailsJourneyStartedBody =>
+      'Dirigiéndose a la ubicación de origen para la recogida.';
+
+  @override
+  String get orderDetailsStartJourney => 'Iniciar viaje de entrega';
+
+  @override
+  String get orderDetailsEmergencyFlagged =>
+      '¡Pedido marcado como Emergencia! 🚨';
+
+  @override
+  String get orderDetailsAssignedFlagged =>
+      'Pedido movido de nuevo a Asignado.';
+
+  @override
+  String get orderDetailsEmergencyTooltip => 'Marcar como Emergencia';
+
+  @override
+  String get notificationsMarkRead => 'Marcar todas como leídas';
+
+  @override
+  String get safetyTitle => 'Cumplimiento de Seguridad';
+
+  @override
+  String get safetyCheckAll => 'Marcar todos los elementos';
+
+  @override
+  String get safetyConfirm => 'Confirmar Control de Seguridad';
+
+  @override
+  String get safetyItem1 => 'Verificar la presión del tanque de combustible';
+
+  @override
+  String get safetyItem2 => 'Inspeccionar las conexiones de la manguera';
+
+  @override
+  String get safetyItem3 =>
+      'Verificar que el tipo de combustible coincida con el pedido';
+
+  @override
+  String get safetyItem4 => 'Revisar la válvula de cierre de emergencia';
+
+  @override
+  String get safetyItem5 => 'Confirmar que el EPP esté colocado';
+
+  @override
+  String get safetyAllRequired =>
+      'Por favor complete todas las comprobaciones de seguridad antes de confirmar.';
+
+  @override
+  String get selectLocationTitle => 'Confirmar Ubicación';
+
+  @override
+  String get selectLocationSearchHint => 'Buscar una ubicación diferente..';
+
+  @override
+  String get selectLocationCurrentSelection => 'SELECCIÓN ACTUAL';
+
+  @override
+  String get selectLocationEstimatedWait => 'ESPERA ESTIMADA';
+
+  @override
+  String get selectLocationServiceFee => 'TARIFA DE SERVICIO';
+
+  @override
+  String get selectLocationConfirmOrder => 'Confirmar Pedido';
+
+  @override
+  String get selectLocationPlaceholderAddress => '123 Innovation Drive';
+
+  @override
+  String get selectLocationPlaceholderCity => 'San Francisco, CA 94105';
+
+  @override
+  String get selectLocationPlaceholderWait => '15-20 mins';
+
+  @override
+  String get selectLocationPlaceholderFee => '\$4.99';
+
+  @override
+  String get selectLocationPlaceholderFullAddress =>
+      '123 Innovation Drive, San Francisco, CA 94105';
+
+  @override
+  String get deliveryCompleteTitle => 'Entrega Completada';
+
+  @override
+  String get deliveryCompleteSubtitle => '¡Pedido entregado con éxito!';
+
+  @override
+  String get deliveryCompleteBackHome => 'Volver al Inicio';
+
+  @override
+  String get deliveryCompleteRating => 'Calificar esta entrega';
+
+  @override
+  String get scheduleDeliveryTitle => 'Programar Entrega';
+
+  @override
+  String get scheduleDeliveryDate => 'Seleccionar Fecha';
+
+  @override
+  String get scheduleDeliveryTime => 'Seleccionar Hora';
+
+  @override
+  String get scheduleDeliveryConfirm => 'Confirmar Programación';
+
+  @override
+  String get scheduleDeliveryNoSlots => 'No hay horarios disponibles.';
+
+  @override
+  String get notificationsMarkAllReadSuccess =>
+      'Todas las notificaciones marcadas como leídas';
+
+  @override
+  String get notificationsFilterAll => 'Todas';
+
+  @override
+  String get notificationsFilterUnread => 'No leídas';
+
+  @override
+  String get notificationsFilterOrder => 'Pedidos';
+
+  @override
+  String notificationsNoFilterNotifications(String filter) {
+    return 'Sin notificaciones de tipo $filter';
+  }
+
+  @override
+  String get notificationsDefaultTitle => 'Notificación';
+
+  @override
+  String get earningsOverviewTitle => 'Resumen de Ganancias';
+
+  @override
+  String get earningsWalletBalance => 'SALDO DE BILLETERA';
+
+  @override
+  String get earningsTodayCaps => 'HOY';
+
+  @override
+  String get earningsActionRequired => 'Acción Requerida';
+
+  @override
+  String get earningsStripeLinkBankDesc =>
+      'Por favor vincule su cuenta bancaria a través de Stripe para habilitar pagos.';
+
+  @override
+  String get earningsLinkBankAccount => 'Vincular Cuenta Bancaria';
+
+  @override
+  String get earningsWeeklyPerformance => 'RENDIMIENTO SEMANAL';
+
+  @override
+  String get earningsThisWeek => 'Esta semana';
+
+  @override
+  String get earningsTotalDeliveriesCaps => 'TOTAL DE ENTREGAS';
+
+  @override
+  String get earningsRecentDeliveries => 'Entregas Recientes';
+
+  @override
+  String get earningsSeeAll => 'Ver todo';
+
+  @override
+  String get earningsNoDeliveriesToday => 'Aún no hay entregas hoy.';
+
+  @override
+  String get earningsCashOutNow => 'Cobrar Ahora';
+
+  @override
+  String get earningsCashOut => 'Retirar Fondos';
+
+  @override
+  String earningsAvailableAmount(String amount) {
+    return 'Disponible: $amount';
+  }
+
+  @override
+  String get earningsAmountHint => 'Ingrese monto';
+
+  @override
+  String get earningsConfirm => 'Confirmar';
+
+  @override
+  String get earningsEnterValidAmount => 'Por favor ingrese un monto válido';
+
+  @override
+  String get earningsInsufficientBalance => 'Saldo insuficiente';
+
+  @override
+  String get earningsStripeErrorInsufficient =>
+      'Error de Stripe: Fondos disponibles insuficientes en su cuenta.';
+
+  @override
+  String get earningsOnboardingLinkError =>
+      'No se pudo abrir el enlace de incorporación.';
+
+  @override
+  String get earningsGeneratingLinkFailed =>
+      'Error al generar el enlace de incorporación.';
+
+  @override
+  String get fuelTitle => 'Combustible';
+
+  @override
+  String get fuelTypes => 'Tipos de Combustible';
+
+  @override
+  String get fuelPetrol => 'Gasolina';
+
+  @override
+  String get fuelDiesel => 'Diésel';
+
+  @override
+  String get fuelOctanePremium => 'Octano 95 Premium';
+
+  @override
+  String get fuelUltraLowSulfur => 'Ultra Bajo Azufre';
+
+  @override
+  String get fuelQuantity => 'Cantidad';
+
+  @override
+  String get fuelApproxRange => 'Alcance aprox: 400 millas';
+
+  @override
+  String get fuelFullTank => 'Tanque Lleno';
+
+  @override
+  String get fuelConfirmOrder => 'Confirmar Pedido';
+
+  @override
+  String deliveryProofCameraError(String error) {
+    return 'Error de cámara: $error';
+  }
+
+  @override
+  String deliveryProofInitError(String error) {
+    return 'Error de inicio: $error';
+  }
+
+  @override
+  String meterPreviewUploadFailed(String error) {
+    return 'Error al subir: $error';
+  }
+
+  @override
+  String meterVerificationCameraError(String error) {
+    return 'Error de cámara: $error';
+  }
+
+  @override
+  String get meterVerificationCaptureFailed =>
+      'Error al tomar la foto. Por favor intente de nuevo.';
+
+  @override
+  String orderDetailsError(String error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get orderTrackingGoBack => 'Volver';
+
+  @override
+  String get paymentCouponHint => 'Ingresar código de cupón';
+
+  @override
+  String get paymentAddNoteHint => 'Agregar nota';
+
+  @override
+  String get paymentButtonLabel => 'Aplicar';
+
+  @override
+  String get paymentHaveCoupon => '¿Tiene un cupón?';
+
+  @override
+  String get rtdCustomer => 'Cliente';
+
+  @override
+  String get safetyNoPhone => 'No hay número de teléfono disponible.';
+
+  @override
+  String get safetyCallError => 'No se pudo abrir el marcador telefónico.';
+
+  @override
+  String get safetySaving => 'Guardando…';
+
+  @override
+  String safetyError(String error) {
+    return 'Error: $error';
+  }
 }
