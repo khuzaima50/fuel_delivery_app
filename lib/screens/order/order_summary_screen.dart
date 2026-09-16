@@ -222,8 +222,8 @@ class OrderSummaryScreen extends StatelessWidget {
                   'status': 'assigned', // For demo purposes, auto-assigning
                   'scheduled_time': scheduledDateTime?.toIso8601String(),
                   'delivery_address': deliveryAddress ?? '123 Innovation Drive, San Francisco, CA 94105',
-                  'delivery_lat': deliveryLat ?? 24.8607,
-                  'delivery_lng': deliveryLng ?? 67.0011,
+                  'delivery_lat': deliveryLat ?? 37.7749,
+                  'delivery_lng': deliveryLng ?? -122.4194,
                   'created_at': DateTime.now().toIso8601String(),
                 };
 
@@ -238,8 +238,8 @@ class OrderSummaryScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) => OrderTrackingScreen(
                         order: response,
-                        deliveryLat: deliveryLat ?? 24.8607,
-                        deliveryLng: deliveryLng ?? 67.0011,
+                        deliveryLat: deliveryLat ?? 37.7749,
+                        deliveryLng: deliveryLng ?? -122.4194,
                         deliveryAddress: orderData['delivery_address'] as String?,
                         fuelInfo: 'Regular · 15 Gallons',
                       ),

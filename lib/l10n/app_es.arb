@@ -29,6 +29,7 @@
   "loginNoAccount": "¿No tienes una cuenta? ",
   "loginSignUp": "Regístrate",
   "loginEmptyFields": "Por favor ingresa tu correo y contraseña",
+  "loginCustomerAccountError": "Esta es una cuenta de cliente. Por favor, use la aplicación de cliente.",
   "loginFailedVerification": "Error al enviar el código de verificación. Inténtalo de nuevo.",
   "loginUnexpectedError": "Ocurrió un error inesperado",
 
@@ -203,7 +204,7 @@
   "dashboardOpenMapsError": "No se pudo abrir Google Maps.",
   "dashboardNoGps": "No hay coordenadas GPS para este pedido todavía.",
   "dashboardSearchingNearby": "Buscando pedidos cercanos...",
-  "dashboardSearchingNearbyDesc": "Los nuevos pedidos dentro de 25 km aparecerán aquí automáticamente.",
+  "dashboardSearchingNearbyDesc": "Los nuevos pedidos dentro de 15 millas aparecerán aquí automáticamente.",
   "dashboardViewAllOrders": "Ver Todos los Pedidos",
   "dashboardViewAllText": "Ver Todos",
   "dashboardStatusAvailable": "DISPONIBLE",
@@ -237,7 +238,7 @@
       }
     }
   },
-  "dashboardOrdersCount": "{count} {count, plural, =1{pedido} other{pedidos}} dentro de 25 km",
+  "dashboardOrdersCount": "{count} {count, plural, =1{pedido} other{pedidos}} dentro de 15 millas",
   "@dashboardOrdersCount": {
     "placeholders": {
       "count": {
@@ -345,7 +346,7 @@
   "assignedNoEmergencyOrders": "No hay pedidos de emergencia todavía.",
   "assignedNoDeliveredOrders": "No hay pedidos entregados todavía.",
   "assignedWaitingGps": "Esperando ubicación GPS…",
-  "assignedShowingNearbyFallback": "Mostrando pedidos dentro de 25 km de tu ubicación (reserva).",
+  "assignedShowingNearbyFallback": "Mostrando pedidos dentro de 15 millas de tu ubicación (reserva).",
   "assignedShowingNearbyConfigured": "Mostrando pedidos dentro de {count} área(s) de servicio configurada(s).",
   "@assignedShowingNearbyConfigured": {
     "placeholders": {

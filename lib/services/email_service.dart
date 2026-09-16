@@ -8,13 +8,15 @@ class EmailService {
 
   static Future<bool> sendOTP(String email, String otp) async {
     final String? apiKey = dotenv.env['RESEND_API_KEY'];
+    final cleanEmail = email.trim().toLowerCase();
     
     if (apiKey == null || apiKey.isEmpty) {
-      debugPrint('Error: RESEND_API_KEY is missing from .env file');
+      debugPrint('[EmailService] Error: RESEND_API_KEY is missing from .env file');
       return false;
     }
 
     try {
+      debugPrint('[EmailService] Sending OTP email to $cleanEmail via Resend...');
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
@@ -23,7 +25,7 @@ class EmailService {
         },
         body: jsonEncode({
           'from': 'no-reply@fueldirectusa.com', 
-          'to': email,
+          'to': cleanEmail,
           'subject': 'Your Verification Code - FuelDirect',
           'html': '''
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
@@ -42,15 +44,15 @@ class EmailService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint('Email sent successfully to $email');
+        debugPrint('[EmailService] Email sent successfully to $cleanEmail (status ${response.statusCode})');
         return true;
       } else {
-        debugPrint('Failed to send email. Status: ${response.statusCode}');
-        debugPrint('Response Body: ${response.body}');
+        debugPrint('[EmailService] Failed to send email. Status: ${response.statusCode}');
+        debugPrint('[EmailService] Response Body: ${response.body}');
         return false;
       }
     } catch (e) {
-      debugPrint('Exception during email send: $e');
+      debugPrint('[EmailService] Exception during email send: $e');
       return false;
     }
   }

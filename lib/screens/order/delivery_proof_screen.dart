@@ -33,24 +33,52 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
   @override
   void initState() {
     super.initState();
-    final requestedTotal =
-        double.tryParse(widget.order?['total_amount']?.toString() ?? '') ?? 0.0;
-    final requestedQty = double.tryParse(
-          (widget.order?['fuel_quantity'] ??
-                  widget.order?['fuel_quantity_gallons'])
-              ?.toString() ??
-              '',
-        ) ??
+
+    // ── Resolve price per gallon ──────────────────────────────────────────
+    // Priority: explicit price_per_gallon / unit_price fields first.
+    // Only fall back to total_amount ÷ quantity if no direct price is stored
+    // (that calculation would otherwise include delivery fees in the per-gal rate).
+    double resolvedPrice =
+        double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
+        double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
         0.0;
-    if (requestedTotal > 0 && requestedQty > 0) {
-      _pricePerGallon =
-          double.parse((requestedTotal / requestedQty).toStringAsFixed(4));
-    } else {
-      _pricePerGallon =
-          double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
-          double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
-          4.85;
+
+    if (resolvedPrice <= 0.0) {
+      // Last resort: derive from order totals (only when no explicit price stored)
+      final requestedTotal =
+          double.tryParse(widget.order?['total_amount']?.toString() ?? '') ?? 0.0;
+      final requestedQty = double.tryParse(
+            (widget.order?['fuel_quantity'] ??
+                    widget.order?['fuel_quantity_gallons'])
+                ?.toString() ??
+                '',
+          ) ??
+          0.0;
+
+      // Subtract fees before dividing so we don't inflate the per-gal rate
+      final deliveryFee = double.tryParse(widget.order?['delivery_fee']?.toString() ?? '') ?? 0.0;
+      final serviceFee = double.tryParse(widget.order?['service_fee']?.toString() ?? '') ?? 0.0;
+      final taxAmount = double.tryParse(widget.order?['tax_amount']?.toString() ?? '') ?? 0.0;
+      final fuelOnlyTotal = requestedTotal - deliveryFee - serviceFee - taxAmount;
+
+      if (fuelOnlyTotal > 0 && requestedQty > 0) {
+        resolvedPrice = double.parse((fuelOnlyTotal / requestedQty).toStringAsFixed(4));
+      } else if (requestedTotal > 0 && requestedQty > 0) {
+        // No fee breakdown available — use total / qty as rough estimate
+        resolvedPrice = double.parse((requestedTotal / requestedQty).toStringAsFixed(4));
+      }
     }
+
+    if (resolvedPrice <= 0.0) {
+      final fuelType = (widget.order?['fuel_type']?.toString() ?? '').toLowerCase();
+      if (fuelType.contains('diesel')) {
+        resolvedPrice = 3.32;
+      } else {
+        resolvedPrice = 4.85;
+      }
+    }
+
+    _pricePerGallon = resolvedPrice;
     _gallonsController.addListener(_calculateTotal);
     _gallonsFocus.addListener(() => setState(() {}));
   }
@@ -65,6 +93,7 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
 
   void _calculateTotal() {
     final gallons = double.tryParse(_gallonsController.text) ?? 0.0;
+    // Total = fuel cost only (gallons × rate). Fees are shown separately in receipt.
     if (mounted) setState(() => _estimatedTotal = gallons * _pricePerGallon);
   }
 
@@ -302,46 +331,6 @@ class _DeliveryProofScreenState extends State<DeliveryProofScreen>
                             color: hasValue
                                 ? const Color(0xFF888888)
                                 : const Color(0xFFD0D7DE))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ── Estimated Total ───────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: const Color(0xFFEEEEEE))),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l10n.proofEstimatedTotal,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF555555))),
-                        const SizedBox(height: 4),
-                        Text(
-                            l10n.proofPricePerGal(_pricePerGallon.toStringAsFixed(2)),
-                            style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF9CB0C3),
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                    Text('\$${_estimatedTotal.toStringAsFixed(2)}',
-                        style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: hasValue
-                                ? const Color(0xFFFF4D00)
-                                : const Color(0xFFF2F2F2))),
                   ],
                 ),
               ),

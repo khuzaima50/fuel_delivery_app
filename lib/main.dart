@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fueldirect_app/l10n/app_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'firebase_options.dart';
 import 'services/notification_service.dart';
+import 'services/notification_store.dart';
 import 'services/app_globals.dart';
 import 'services/locale_service.dart';
 import 'widgets/app_lifecycle_manager.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/onboarding/splash_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/order/assigned_orders_screen.dart';
@@ -17,8 +21,61 @@ import 'screens/chat/chat_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  debugPrint("Handling a background message: ${message.messageId}");
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint('[FCM_BG] Background message ID: ${message.messageId} | data: ${message.data}');
+
+  try {
+    final notification = message.notification;
+    String title = notification?.title ?? message.data['title'] ?? message.data['sender_name'] ?? '';
+    String body = notification?.body ?? message.data['body'] ?? message.data['message'] ?? '';
+
+    if (title.isEmpty && body.isEmpty) {
+      if (message.data['type'] == 'chat') {
+        title = message.data['sender_name'] ?? 'Customer 💬';
+        body = message.data['message'] ?? 'New chat message received';
+      }
+    }
+
+    if (title.isNotEmpty || body.isNotEmpty) {
+      final localPlugin = FlutterLocalNotificationsPlugin();
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      await localPlugin.initialize(settings: const InitializationSettings(android: androidSettings));
+
+      const channel = AndroidNotificationChannel(
+        'order_updates',
+        'Order Updates',
+        description: 'Fuel delivery order status and chat notifications',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+
+      await localPlugin
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+
+      await localPlugin.show(
+        id: message.hashCode,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'order_updates',
+            'Order Updates',
+            channelDescription: 'Fuel delivery order status and chat notifications',
+            importance: Importance.max,
+            priority: Priority.high,
+            color: Color(0xFFFF4D00),
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        payload: jsonEncode(message.data),
+      );
+    }
+  } catch (e) {
+    debugPrint('[FCM_BG] Error handling background message: $e');
+  }
 }
 
 void main() async {
@@ -35,7 +92,8 @@ void main() async {
   await LocaleService().loadSavedLocale();
 
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
     if (Firebase.apps.isNotEmpty) {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       NotificationService.initialize().catchError((e) {
@@ -92,6 +150,14 @@ class _FuelDirectAppState extends State<FuelDirectApp> {
         final session = data.session;
 
         debugPrint('[Auth] Event: $event | Session: ${session != null ? "exists" : "null"}');
+
+        if (session != null) {
+          final driverId = session.user.id;
+          debugPrint('[Auth] Session active — syncing FCM token, NotificationStore & chat listener for $driverId');
+          NotificationService.syncToken();
+          NotificationStore.instance.syncWithSupabase(driverId);
+          NotificationService.startRealtimeMessageListener(driverId);
+        }
 
         if (event == AuthChangeEvent.signedOut) {
           debugPrint('[Auth] signedOut detected — waiting briefly to check for token refresh...');

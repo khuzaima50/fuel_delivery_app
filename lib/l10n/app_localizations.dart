@@ -248,6 +248,12 @@ abstract class AppLocalizations {
   /// **'Please enter email and password'**
   String get loginEmptyFields;
 
+  /// No description provided for @loginCustomerAccountError.
+  ///
+  /// In en, this message translates to:
+  /// **'This is a customer account. Please use the Customer App.'**
+  String get loginCustomerAccountError;
+
   /// No description provided for @loginFailedVerification.
   ///
   /// In en, this message translates to:
@@ -1121,7 +1127,7 @@ abstract class AppLocalizations {
   /// No description provided for @dashboardSearchingNearbyDesc.
   ///
   /// In en, this message translates to:
-  /// **'New orders within 25 km will appear here automatically.'**
+  /// **'New orders within 15 miles will appear here automatically.'**
   String get dashboardSearchingNearbyDesc;
 
   /// No description provided for @dashboardViewAllOrders.
@@ -1199,7 +1205,7 @@ abstract class AppLocalizations {
   /// No description provided for @dashboardOrdersCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} {count, plural, =1{order} other{orders}} within 25 km'**
+  /// **'{count} {count, plural, =1{order} other{orders}} within 15 miles'**
   String dashboardOrdersCount(int count);
 
   /// No description provided for @settingsTitle.
@@ -1667,7 +1673,7 @@ abstract class AppLocalizations {
   /// No description provided for @assignedShowingNearbyFallback.
   ///
   /// In en, this message translates to:
-  /// **'Showing orders within 25 km of your location (fallback).'**
+  /// **'Showing orders within 15 miles of your location (fallback).'**
   String get assignedShowingNearbyFallback;
 
   /// No description provided for @assignedShowingNearbyConfigured.

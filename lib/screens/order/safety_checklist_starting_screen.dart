@@ -27,12 +27,12 @@ class _SafetyChecklistStartingScreenState
             widget.order?['delivery_lat']?.toString() ?? '') ??
         double.tryParse(
             widget.order?['latitude']?.toString() ?? '') ??
-        24.8607; // Karachi fallback
+        37.7749; // Default fallback
     final lng = double.tryParse(
             widget.order?['delivery_lng']?.toString() ?? '') ??
         double.tryParse(
             widget.order?['longitude']?.toString() ?? '') ??
-        67.0011;
+        -122.4194;
     return CameraPosition(target: LatLng(lat, lng), zoom: 15.0);
   }
 

@@ -436,7 +436,8 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
 
     final orderId = completedOrder['id']?.toString() ?? '';
     final qty = double.tryParse((completedOrder['fuel_quantity_gallons'] ?? completedOrder['fuel_quantity'])?.toString() ?? '0.0') ?? 0.0;
-    final earned = double.tryParse((completedOrder['driver_earning'] ?? completedOrder['total_amount'])?.toString() ?? '0.0') ?? 0.0;
+    final total = double.tryParse(completedOrder['total_amount']?.toString() ?? '0.0') ?? 0.0;
+    final earned = double.tryParse(completedOrder['driver_earning']?.toString() ?? '0.0') ?? 0.0;
     final fuelType = completedOrder['fuel_type']?.toString() ?? 'Fuel';
     final location = completedOrder['delivery_address']?.toString() ?? 'Customer Location';
 
@@ -445,7 +446,8 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
         builder: (_) => DeliveryCompleteScreen(
           orderId: orderId,
           deliveredGallons: qty,
-          totalAmount: earned,
+          totalAmount: total,
+          driverEarning: earned,
           fuelType: fuelType,
           address: location,
         ),
@@ -478,10 +480,27 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
       if (orderId == null) throw Exception('Order ID could not be determined.');
 
       final qty = widget.deliveredGallons;
-      final unitPrice = double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
-                        double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
-                        widget.pricePerGallon;
-      final totalPrice = widget.computedTotal ?? (qty * unitPrice);
+      final dbUnitPrice = double.tryParse(widget.order?['price_per_gallon']?.toString() ?? '') ??
+                          double.tryParse(widget.order?['unit_price']?.toString() ?? '') ??
+                          0.0;
+      final unitPrice = dbUnitPrice > 0.0
+          ? dbUnitPrice
+          : (widget.pricePerGallon > 0.0 ? widget.pricePerGallon : 4.85);
+
+      // Base fuel cost
+      final fuelCost = qty * unitPrice;
+
+      // Add back the fixed fees from the original order (delivery fee, service fee, tax)
+      final deliveryFee = double.tryParse(widget.order?['delivery_fee']?.toString() ?? '') ?? 0.0;
+      final serviceFee = double.tryParse(widget.order?['service_fee']?.toString() ?? '') ?? 0.0;
+      final taxAmount = double.tryParse(widget.order?['tax_amount']?.toString() ?? '') ?? 0.0;
+
+      // Final total: use computedTotal if provided (already includes fees from proof screen),
+      // otherwise recalculate as fuelCost + fixed fees
+      final totalPrice = (widget.computedTotal != null && widget.computedTotal! > 0.0)
+          ? widget.computedTotal! + deliveryFee + serviceFee + taxAmount
+          : fuelCost + deliveryFee + serviceFee + taxAmount;
+
       final earningRate = double.tryParse(widget.order?['earning_rate']?.toString() ?? '0.1') ?? 0.1;
       final earned = totalPrice * earningRate;
       final nowIso = DateTime.now().toUtc().toIso8601String();
@@ -536,12 +555,31 @@ class _SafetyComplianceScreenState extends State<SafetyComplianceScreen> {
         });
       } catch (_) {}
 
-      // 5. Notify customer
-      final userId = widget.order?['user_id']?.toString();
+      // 5. Notify customer — resolve user_id from widget.order or fallback to DB
+      String? userId = widget.order?['user_id']?.toString();
+      if (userId == null || userId.isEmpty) {
+        // Fallback: read user_id from the orders table directly
+        try {
+          final orderRow = await Supabase.instance.client
+              .from('orders')
+              .select('user_id')
+              .eq('id', orderId)
+              .maybeSingle();
+          userId = orderRow?['user_id']?.toString();
+          debugPrint('[SafetyCompliance] Resolved user_id from DB: $userId');
+        } catch (e) {
+          debugPrint('[SafetyCompliance] Could not resolve user_id from DB: $e');
+        }
+      }
       if (userId != null && userId.isNotEmpty) {
         try {
+          debugPrint('[SafetyCompliance] Sending order-completed notification to user: $userId');
           NotificationService.notifyUserOrderCompleted(userId, orderId);
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[SafetyCompliance] notifyUserOrderCompleted error: $e');
+        }
+      } else {
+        debugPrint('[SafetyCompliance] WARNING: user_id is empty — completion notification NOT sent');
       }
 
       NotificationService.showImmediateNotification(

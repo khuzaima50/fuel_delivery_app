@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/driver_database_service.dart';
+import '../services/notification_service.dart';
 
 /// Wraps the root widget and uses [WidgetsBindingObserver] to track
 /// app lifecycle state — foreground, background, and close events —
@@ -37,6 +39,11 @@ class _AppLifecycleManagerState extends State<AppLifecycleManager>
     switch (state) {
       case AppLifecycleState.resumed:
         DriverDatabaseService.instance.logDriverAction(action: 'APP_RESUMED');
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user != null) {
+          NotificationService.syncToken();
+          NotificationService.startRealtimeMessageListener(user.id);
+        }
         break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:

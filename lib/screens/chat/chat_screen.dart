@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:fueldirect_app/l10n/app_localizations.dart';
-import '../../services/notification_service.dart';
+import 'package:fueldirect_app/services/notification_service.dart';
+
 
 class ChatScreen extends StatefulWidget {
   final String orderId;
   final String customerId;
   final String customerName;
+
+  static String? activeChatOrderId;
 
   const ChatScreen({
     super.key,
@@ -35,6 +38,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    ChatScreen.activeChatOrderId = widget.orderId;
     _myId = _supabase.auth.currentUser?.id ?? '';
     _messageController.addListener(() {
       final has = _messageController.text.trim().isNotEmpty;
@@ -44,6 +48,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    if (ChatScreen.activeChatOrderId == widget.orderId) {
+      ChatScreen.activeChatOrderId = null;
+    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -58,20 +65,44 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
 
     try {
+      // Resolve receiver ID — use widget.customerId, fallback to DB lookup
+      String receiverId = widget.customerId;
+      if (receiverId.isEmpty) {
+        debugPrint('[Chat] customerId is empty — attempting DB lookup via orderId');
+        try {
+          final orderRow = await _supabase
+              .from('orders')
+              .select('user_id')
+              .eq('id', widget.orderId)
+              .maybeSingle();
+          receiverId = orderRow?['user_id']?.toString() ?? '';
+          debugPrint('[Chat] Resolved customerId from DB: $receiverId');
+        } catch (e) {
+          debugPrint('[Chat] DB fallback for customerId failed: $e');
+        }
+      }
+
       await _supabase.from('messages').insert({
         'order_id': widget.orderId,
         'sender_id': _myId,
-        'receiver_id': widget.customerId,
+        'receiver_id': receiverId,
         'message': text,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
-      NotificationService.notifyChatMessage(
-        receiverId: widget.customerId,
-        receiverType: 'user',
-        messageText: text,
-        orderId: widget.orderId,
-      );
+      // Send push notification to customer
+      // receiverType 'user' → Edge Function looks up FCM token in profiles table
+      if (receiverId.isNotEmpty) {
+        debugPrint('[Chat] Sending chat push notification to user: $receiverId');
+        NotificationService.notifyChatMessage(
+          receiverId: receiverId,
+          receiverType: 'user',
+          messageText: text,
+          orderId: widget.orderId,
+        );
+      } else {
+        debugPrint('[Chat] WARNING: receiverId is empty — push notification NOT sent');
+      }
 
       _scrollToBottom();
     } catch (e) {
@@ -215,9 +246,35 @@ class _ChatScreenState extends State<ChatScreen> {
                   .order('created_at', ascending: true),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
+                  debugPrint('[ChatScreen] Stream error: ${snapshot.error}');
                   return Center(
-                    child: Text(l10n.chatError(snapshot.error.toString()),
-                        style: const TextStyle(color: Colors.red)),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.wifi_off_rounded, size: 44, color: Colors.grey[400]),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Connecting to chat...',
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () => setState(() {}),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _orange,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Text(l10n.common_retry),
+                        ),
+                      ],
+                    ),
                   );
                 }
 

@@ -195,7 +195,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
           const SizedBox(height: 100), // Space for floating bar
         ],
       ),
-      bottomNavigationBar: const FloatingBottomNavBar(currentIndex: 3), 
+      bottomNavigationBar: const FloatingBottomNavBar(currentIndex: 2), 
     );
   }
 

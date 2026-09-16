@@ -29,6 +29,7 @@
   "loginNoAccount": "Don't have an account? ",
   "loginSignUp": "Sign Up",
   "loginEmptyFields": "Please enter email and password",
+  "loginCustomerAccountError": "This is a customer account. Please use the Customer App.",
   "loginFailedVerification": "Failed to send verification code. Please try again.",
   "loginUnexpectedError": "An unexpected error occurred",
 
@@ -203,7 +204,7 @@
   "dashboardOpenMapsError": "Could not open Google Maps.",
   "dashboardNoGps": "No GPS coordinates for this order yet.",
   "dashboardSearchingNearby": "Searching for nearby orders...",
-  "dashboardSearchingNearbyDesc": "New orders within 25 km will appear here automatically.",
+  "dashboardSearchingNearbyDesc": "New orders within 15 miles will appear here automatically.",
   "dashboardViewAllOrders": "View All Orders",
   "dashboardViewAllText": "View All",
   "dashboardStatusAvailable": "AVAILABLE",
@@ -237,7 +238,7 @@
       }
     }
   },
-  "dashboardOrdersCount": "{count} {count, plural, =1{order} other{orders}} within 25 km",
+  "dashboardOrdersCount": "{count} {count, plural, =1{order} other{orders}} within 15 miles",
   "@dashboardOrdersCount": {
     "placeholders": {
       "count": {
@@ -345,7 +346,7 @@
   "assignedNoEmergencyOrders": "No emergency orders yet.",
   "assignedNoDeliveredOrders": "No delivered orders yet.",
   "assignedWaitingGps": "Waiting for GPS location…",
-  "assignedShowingNearbyFallback": "Showing orders within 25 km of your location (fallback).",
+  "assignedShowingNearbyFallback": "Showing orders within 15 miles of your location (fallback).",
   "assignedShowingNearbyConfigured": "Showing orders within {count} configured service area(s).",
   "@assignedShowingNearbyConfigured": {
     "placeholders": {

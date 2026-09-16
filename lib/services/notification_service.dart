@@ -7,7 +7,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_globals.dart';
+import 'notification_common.dart';
 import '../screens/order/delivery_complete_screen.dart';
+import '../screens/chat/chat_screen.dart';
 
 /// Handles all push + in-app notification logic for the FuelDirect driver app.
 ///
@@ -17,6 +19,17 @@ import '../screens/order/delivery_complete_screen.dart';
 ///             → FCM HTTP v1 API
 ///             → Target device
 class NotificationService {
+  // ── Singleton (instance methods used by NotificationStore) ──────────────
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  /// Emits foreground FCM notifications so NotificationStore can cache them.
+  final _onLocalNotification =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get onLocalNotification =>
+      _onLocalNotification.stream;
+
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localPlugin =
       FlutterLocalNotificationsPlugin();
@@ -32,7 +45,7 @@ class NotificationService {
     );
     debugPrint('[Notif] Permission status: ${settings.authorizationStatus}');
 
-    // 2. Create high-priority Android notification channel
+    // 2. Create high-priority Android notification channels
     const channel = AndroidNotificationChannel(
       'order_updates',
       'Order Updates',
@@ -41,10 +54,20 @@ class NotificationService {
       playSound: true,
       enableVibration: true,
     );
-    await _localPlugin
+    const immediateChannel = AndroidNotificationChannel(
+      'immediate_notifications',
+      'App Notifications',
+      description: 'Real-time feedback for driver actions and chat messages',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    final androidImplementation = _localPlugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidImplementation?.createNotificationChannel(channel);
+    await androidImplementation?.createNotificationChannel(immediateChannel);
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       debugPrint('[Notif] User granted permission');
@@ -56,7 +79,7 @@ class NotificationService {
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
     await _localPlugin.initialize(
-      const InitializationSettings(android: androidSettings),
+      settings: const InitializationSettings(android: androidSettings),
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
 
@@ -80,54 +103,63 @@ class NotificationService {
       _handleNotificationTap(initial);
     }
 
+    // 8. Start realtime listener if user is already logged in
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    if (currentUser != null) {
+      startRealtimeMessageListener(currentUser.id);
+    }
+
     debugPrint('[Notif] NotificationService initialized ✓');
   }
 
   // ── FCM Token ───────────────────────────────────────────────────────────
 
-  /// Saves (or refreshes) the FCM token into the `drivers` table.
-  /// Uses upsert so it works even if the driver row doesn't exist yet.
+  /// Saves (or refreshes) the FCM token into both `drivers` and `profiles` tables.
   static Future<void> syncToken() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
-        debugPrint('[Notif] updateFcmToken: no authenticated user — skipping');
+        debugPrint('[Notif] syncToken: no authenticated user — skipping');
         return;
-      }
-
-      debugPrint('[Notif] Forcing Firebase to generate a fresh FCM token...');
-      try {
-        await _messaging.deleteToken();
-      } catch (e) {
-        debugPrint('[Notif] deleteToken ignored: $e');
       }
 
       final token = await _messaging.getToken();
       if (token == null || token.isEmpty) {
-        debugPrint('[Notif] updateFcmToken: FCM token is NULL — check Firebase setup');
+        debugPrint('[Notif] syncToken: FCM token is NULL — check Firebase setup / permissions');
         return;
       }
 
       debugPrint('[Notif] FCM token obtained: ${token.substring(0, 20)}...');
 
-      // Use update (driver row already exists from registration flow)
-      // upsert would create a new partial row — use update + check affected rows
-      final res = await Supabase.instance.client
-          .from('drivers')
-          .update({'fcm_token': token})
-          .eq('id', user.id)
-          .select('id');
+      // Update drivers table
+      try {
+        final res = await Supabase.instance.client
+            .from('drivers')
+            .update({'fcm_token': token})
+            .eq('id', user.id)
+            .select('id');
 
-      if (res.isEmpty) {
-        // Driver row not found — try upsert as fallback
-        debugPrint('[Notif] Driver row not found for ${user.id} — trying upsert');
-        await Supabase.instance.client.from('drivers').upsert(
-          {'id': user.id, 'fcm_token': token},
-          onConflict: 'id',
-        );
+        if (res.isEmpty) {
+          await Supabase.instance.client.from('drivers').upsert(
+            {'id': user.id, 'fcm_token': token},
+            onConflict: 'id',
+          );
+        }
+      } catch (e) {
+        debugPrint('[Notif] Error updating drivers.fcm_token: $e');
       }
 
-      debugPrint('[Notif] FCM token saved to drivers table ✓');
+      // Also update profiles table for complete consistency
+      try {
+        await Supabase.instance.client
+            .from('profiles')
+            .update({'fcm_token': token})
+            .eq('id', user.id);
+      } catch (e) {
+        debugPrint('[Notif] Error updating profiles.fcm_token: $e');
+      }
+
+      debugPrint('[Notif] FCM token saved to drivers and profiles tables ✓');
     } catch (e) {
       debugPrint('[Notif] Token update error (non-fatal): $e');
     }
@@ -232,7 +264,13 @@ class NotificationService {
   /// Driver accepts an order → notify the customer user.
   static void notifyUserOrderAccepted(String userId, String orderId) {
     debugPrint('[Notif] EVENT: Order Accepted → notifying user $userId');
-    // User notification is now handled by SQL Trigger fn_notify_order_status_change
+    unawaited(_sendNotification(
+      targetType: 'user',
+      targetId: userId,
+      title: 'Driver Accepted 🚗',
+      body: 'A driver has accepted your order and is on the way!',
+      data: {'type': 'order_update', 'order_id': orderId, 'status': 'accepted'},
+    ));
     unawaited(saveDriverNotification(
       title: 'Order Accepted',
       message: 'You accepted order #${orderId.substring(0, 4).toUpperCase()}',
@@ -244,13 +282,25 @@ class NotificationService {
   /// Driver starts delivery → notify the customer user.
   static void notifyUserDeliveryStarted(String userId, String orderId) {
     debugPrint('[Notif] EVENT: Delivery Started → notifying user $userId');
-    // User notification is now handled by SQL Trigger fn_notify_order_status_change
+    unawaited(_sendNotification(
+      targetType: 'user',
+      targetId: userId,
+      title: 'Delivery Started 🚛',
+      body: 'Your driver is on the way with your fuel!',
+      data: {'type': 'order_update', 'order_id': orderId, 'status': 'in_progress'},
+    ));
   }
 
   /// Driver arrives → notify the customer user.
   static void notifyUserDriverArrived(String userId, String orderId) {
     debugPrint('[Notif] EVENT: Driver Arrived → notifying user $userId');
-    // User notification is now handled by SQL Trigger fn_notify_order_status_change
+    unawaited(_sendNotification(
+      targetType: 'user',
+      targetId: userId,
+      title: 'Driver Arrived 📍',
+      body: 'Your driver has arrived at your location.',
+      data: {'type': 'order_update', 'order_id': orderId, 'status': 'driver_arrived'},
+    ));
   }
 
   /// Driver finished fueling → notify the customer to confirm receipt.
@@ -282,7 +332,13 @@ class NotificationService {
   /// Order completed → notify the customer user.
   static void notifyUserOrderCompleted(String userId, String orderId) {
     debugPrint('[Notif] EVENT: Order Completed → notifying user $userId');
-    // User notification is now handled by SQL Trigger
+    unawaited(_sendNotification(
+      targetType: 'user',
+      targetId: userId,
+      title: 'Order Completed ✅',
+      body: 'Your fuel delivery has been completed. Thank you!',
+      data: {'type': 'order_update', 'order_id': orderId, 'status': 'completed'},
+    ));
     unawaited(saveDriverNotification(
       title: 'Delivery Completed',
       message:
@@ -315,7 +371,123 @@ class NotificationService {
     ));
   }
 
-  // ── Foreground / Background Handlers ───────────────────────────────────
+  static final Set<String> _processedMessageIds = {};
+  static StreamSubscription? _chatSubscription;
+
+  /// Real-time stream of driver notifications from the `notifications` table.
+  static Stream<List<Map<String, dynamic>>> getNotificationStream(
+      String driverId) {
+    return Supabase.instance.client
+        .from('notifications')
+        .stream(primaryKey: ['id'])
+        .eq('driver_id', driverId)
+        .order('created_at', ascending: false);
+  }
+
+  /// Listens in realtime to incoming chat messages for this driver.
+  /// If the driver is not currently looking at the chat screen for this order,
+  /// an immediate local notification and a floating in-app banner with 'Reply'
+  /// action are displayed.
+  static void startRealtimeMessageListener(String driverId) {
+    _chatSubscription?.cancel();
+    debugPrint('[Notif] Starting realtime chat message listener for driver $driverId');
+
+    _chatSubscription = Supabase.instance.client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .limit(20)
+        .listen((messages) async {
+      if (messages.isEmpty) return;
+
+      for (final latest in messages) {
+        final msgId = latest['id']?.toString() ?? '';
+        if (msgId.isEmpty || _processedMessageIds.contains(msgId)) continue;
+        _processedMessageIds.add(msgId);
+        if (_processedMessageIds.length > 200) {
+          _processedMessageIds.remove(_processedMessageIds.first);
+        }
+
+        final senderId = latest['sender_id']?.toString() ?? '';
+        // Skip messages sent by the driver himself
+        if (senderId == driverId) continue;
+
+        final orderId = latest['order_id']?.toString() ?? '';
+        final messageText = latest['message']?.toString() ?? '';
+        final receiverId = latest['receiver_id']?.toString();
+
+        // Ignore messages created more than 60 seconds ago
+        final createdAtStr = latest['created_at']?.toString();
+        if (createdAtStr != null) {
+          final createdAt = DateTime.tryParse(createdAtStr);
+          if (createdAt != null &&
+              DateTime.now().toUtc().difference(createdAt).inSeconds > 60) {
+            continue;
+          }
+        }
+
+        // If driver is currently inside the active ChatScreen for this order, skip alert
+        if (ChatScreen.activeChatOrderId == orderId) {
+          continue;
+        }
+
+        // If receiver_id is explicitly set for someone else, skip
+        if (receiverId != null &&
+            receiverId.isNotEmpty &&
+            receiverId != driverId) {
+          continue;
+        }
+
+        // If receiver_id is null, verify order belongs to driver
+        if (receiverId == null || receiverId.isEmpty) {
+          try {
+            final order = await Supabase.instance.client
+                .from('orders')
+                .select('driver_id')
+                .eq('id', orderId)
+                .maybeSingle();
+            if (order != null && order['driver_id'] != driverId) {
+              continue;
+            }
+          } catch (_) {}
+        }
+
+        // Look up sender name from profiles
+        String senderName = 'Customer';
+        try {
+          final profile = await Supabase.instance.client
+              .from('profiles')
+              .select('full_name')
+              .eq('id', senderId)
+              .maybeSingle();
+          if (profile != null &&
+              profile['full_name'] != null &&
+              profile['full_name'].toString().trim().isNotEmpty) {
+            senderName = profile['full_name'].toString().trim();
+          }
+        } catch (_) {}
+
+        final preview = messageText.length > 60
+            ? '${messageText.substring(0, 60)}…'
+            : messageText;
+
+        debugPrint(
+            '[Notif] 💬 Incoming Chat Alert from $senderName: "$preview" for order $orderId');
+
+        // 1. Trigger local sound / status bar notification
+        await showImmediateNotification(
+          title: '$senderName 💬',
+          body: preview,
+          type: 'chat',
+          orderId: orderId,
+        );
+      }
+    }, onError: (e) {
+      debugPrint('[Notif] Realtime chat message stream error: $e');
+    });
+  }
+
+  // ── Foreground / Background Handlers ──────────────────────────────────
 
   static void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('[Notif] Foreground message received: ${message.notification?.title}');
@@ -337,6 +509,18 @@ class NotificationService {
       return;
     }
 
+    // Emit to NotificationStore so it can cache locally
+    NotificationService().onLocalNotification;
+    NotificationService()._onLocalNotification.add({
+      'title': notification.title ?? '',
+      'body': notification.body ?? '',
+      'type': type == 'promo'
+          ? NotificationType.promo
+          : type == 'system'
+              ? NotificationType.system
+              : NotificationType.order,
+    });
+
     // Show local notification
     _showLocalNotification(message);
 
@@ -347,53 +531,6 @@ class NotificationService {
       type: type,
       orderId: message.data['order_id'],
     ));
-
-    // Show in-app SnackBar banner
-    final ctx = navigatorKey.currentContext;
-    if (ctx != null) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.notifications_rounded, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      notification.title ?? '',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                    if (notification.body != null)
-                      Text(
-                        notification.body!,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFFF4D00),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 5),
-        ),
-      );
-    }
   }
 
   static void _showLocalNotification(RemoteMessage message) {
@@ -401,10 +538,10 @@ class NotificationService {
     if (notification == null) return;
 
     _localPlugin.show(
-      message.hashCode,
-      notification.title,
-      notification.body,
-      const NotificationDetails(
+      id: message.hashCode,
+      title: notification.title,
+      body: notification.body,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'order_updates',
           'Order Updates',
@@ -461,10 +598,10 @@ class NotificationService {
 
       final id = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       await _localPlugin.show(
-        id,
-        title,
-        body,
-        platformDetails,
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: platformDetails,
       );
 
       // 2. Save to History for this driver
@@ -505,12 +642,19 @@ class NotificationService {
     }
 
     if (type == 'chat' && orderId != null) {
+      final customerId = data['sender_id']?.toString() ??
+          data['customer_id']?.toString() ??
+          receiverId ??
+          '';
+      final customerName = data['sender_name']?.toString() ??
+          data['customer_name']?.toString() ??
+          'Customer';
       navigator.pushNamed(
         '/chat',
         arguments: {
           'orderId': orderId,
-          'customerId': receiverId ?? '',
-          'customerName': 'Customer',
+          'customerId': customerId,
+          'customerName': customerName,
         },
       );
     } else if (type == 'order_completed' && orderId != null) {
@@ -536,14 +680,16 @@ class NotificationService {
 
       if (res != null) {
         final double qty = (res['fuel_quantity'] ?? res['fuel_quantity_gallons'] ?? 0.0).toDouble();
-        final double earned = (res['driver_earning'] ?? res['total_amount'] ?? 0.0).toDouble();
+        final double total = (res['total_amount'] ?? 0.0).toDouble();
+        final double earned = (res['driver_earning'] ?? 0.0).toDouble();
         
         navigator.pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => DeliveryCompleteScreen(
               orderId: orderId,
               deliveredGallons: qty,
-              totalAmount: earned,
+              totalAmount: total,
+              driverEarning: earned,
               fuelType: res['fuel_type'] ?? 'Fuel',
               address: res['delivery_address'] ?? 'Customer Location',
             ),

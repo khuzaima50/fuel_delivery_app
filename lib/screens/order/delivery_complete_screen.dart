@@ -6,6 +6,7 @@ class DeliveryCompleteScreen extends StatelessWidget {
   final String orderId;
   final double deliveredGallons;
   final double totalAmount;
+  final double driverEarning;
   final String fuelType;
   final String address;
 
@@ -14,6 +15,7 @@ class DeliveryCompleteScreen extends StatelessWidget {
     required this.orderId,
     required this.deliveredGallons,
     required this.totalAmount,
+    required this.driverEarning,
     this.fuelType = 'Regular',
     this.address = 'Customer Location',
   });
@@ -135,8 +137,6 @@ class DeliveryCompleteScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       _buildInfoRow('Quantity', '${deliveredGallons.toStringAsFixed(2)} Gal'),
-                      const SizedBox(height: 16),
-                      _buildInfoRow('Amount Earned', '\$${totalAmount.toStringAsFixed(2)}'),
                       const SizedBox(height: 16),
                       _buildInfoRow('Fuel Type', fuelType),
                       const SizedBox(height: 16),

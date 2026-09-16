@@ -44,67 +44,116 @@ class _LoginScreenState extends State<LoginScreen> {
         password: password,
       );
 
-        Widget nextRoute = const DashboardScreen();
+      final user = res.user;
+      if (user != null) {
+        // Role-based security check: customer accounts cannot log in to driver app
+        String? role;
+        try {
+          final profileData = await Supabase.instance.client
+              .from('profiles')
+              .select('role')
+              .eq('id', user.id)
+              .maybeSingle();
+          role = profileData?['role'] as String?;
+        } catch (_) {}
 
-        if (res.user != null) {
-          try {
-            final profile = await Supabase.instance.client
-                .from('drivers')
-                .select()
-                .eq('id', res.user!.id)
-                .maybeSingle();
+        final metaRole = user.userMetadata?['role'] as String?;
+        final bool isDriverRole = (role == 'driver' || role == 'admin' || metaRole == 'driver' || metaRole == 'admin');
 
-            if (profile == null) {
-              final userMeta = res.user!.userMetadata;
-              final fullName = userMeta?['full_name'] ?? email.split('@').first;
-
-              await Supabase.instance.client.from('drivers').insert({
-                'id': res.user!.id,
-                'full_name': fullName,
-                'email': email,
-                'phone': userMeta?['phone'] ?? '',
-              });
-
-              nextRoute = const DocumentVerificationScreen();
-            } else {
-              final docsSubmitted = profile['documents_submitted'] == true;
-              final profileCompleted = profile['is_profile_completed'] == true;
-              final vehicleAdded = profile['vehicle_type'] != null &&
-                  (profile['vehicle_type'] as String).isNotEmpty;
-
-              if (!docsSubmitted) {
-                nextRoute = const DocumentVerificationScreen();
-              } else if (!profileCompleted) {
-                nextRoute = const ProfileSetupScreen();
-              } else if (!vehicleAdded) {
-                nextRoute = const VehicleInfoScreen();
-              }
-            }
-          } catch (e) {
-            debugPrint("Failed to create/check driver profile on login: $e");
-          }
-
-          unawaited(NotificationService.syncToken());
-
-          final otpSent = await OtpService.sendOtp(email);
-
+        if (role == 'customer') {
+          await Supabase.instance.client.auth.signOut();
           if (mounted) {
-            if (otpSent) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => OtpVerificationScreen(
-                    email: email,
-                    nextScreen: nextRoute,
-                  ),
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.loginCustomerAccountError),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        if (!isDriverRole) {
+          final driverCheck = await Supabase.instance.client
+              .from('drivers')
+              .select('id')
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (driverCheck == null) {
+            await Supabase.instance.client.auth.signOut();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(l10n.loginCustomerAccountError),
+                  backgroundColor: Colors.red,
                 ),
               );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.loginFailedVerification)),
-              );
             }
+            return;
           }
         }
+
+        Widget nextRoute = const DashboardScreen();
+
+        try {
+          final profile = await Supabase.instance.client
+              .from('drivers')
+              .select()
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (profile == null) {
+            final userMeta = user.userMetadata;
+            final fullName = userMeta?['full_name'] ?? email.split('@').first;
+
+            await Supabase.instance.client.from('drivers').insert({
+              'id': user.id,
+              'full_name': fullName,
+              'email': email,
+              'phone': userMeta?['phone'] ?? '',
+            });
+
+            nextRoute = const DocumentVerificationScreen();
+          } else {
+            final docsSubmitted = profile['documents_submitted'] == true;
+            final profileCompleted = profile['is_profile_completed'] == true;
+            final vehicleAdded = profile['vehicle_type'] != null &&
+                (profile['vehicle_type'] as String).isNotEmpty;
+
+            if (!docsSubmitted) {
+              nextRoute = const DocumentVerificationScreen();
+            } else if (!profileCompleted) {
+              nextRoute = const ProfileSetupScreen();
+            } else if (!vehicleAdded) {
+              nextRoute = const VehicleInfoScreen();
+            }
+          }
+        } catch (e) {
+          debugPrint("Failed to create/check driver profile on login: $e");
+        }
+
+        unawaited(NotificationService.syncToken());
+
+        final otpSent = await OtpService.sendOtp(email);
+
+        if (mounted) {
+          if (otpSent) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => OtpVerificationScreen(
+                  email: email,
+                  nextScreen: nextRoute,
+                ),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.loginFailedVerification)),
+            );
+          }
+        }
+      }
     } on AuthException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

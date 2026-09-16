@@ -224,6 +224,17 @@ serve(async (req: Request) => {
       }
       fcmToken = profile?.fcm_token ?? null;
 
+      // Fallback: check drivers table if token not found in profiles
+      if (!fcmToken) {
+        console.log("[DB] Fallback: checking drivers table for user token...");
+        const { data: driver } = await supabase
+          .from("drivers")
+          .select("fcm_token")
+          .eq("id", target_id)
+          .maybeSingle();
+        fcmToken = driver?.fcm_token ?? null;
+      }
+
     } else if (target_type === "driver") {
       console.log("[DB] Looking up FCM token in drivers table...");
       const { data: driver, error } = await supabase
@@ -238,6 +249,17 @@ serve(async (req: Request) => {
         console.log("[DB] Driver found, fcm_token:", driver?.fcm_token ? "present" : "NULL");
       }
       fcmToken = driver?.fcm_token ?? null;
+
+      // Fallback: check profiles table if token not found in drivers
+      if (!fcmToken) {
+        console.log("[DB] Fallback: checking profiles table for driver token...");
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("fcm_token")
+          .eq("id", target_id)
+          .maybeSingle();
+        fcmToken = profile?.fcm_token ?? null;
+      }
 
     } else {
       console.warn("[Handler] Invalid target_type:", target_type);

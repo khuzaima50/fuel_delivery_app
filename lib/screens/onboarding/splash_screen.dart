@@ -7,6 +7,8 @@ import '../dashboard/dashboard_screen.dart';
 import '../auth/profile_setup_screen.dart';
 import '../auth/vehicle_info_screen.dart';
 import '../auth/document_verification_screen.dart';
+import '../../services/notification_service.dart';
+import '../../services/notification_store.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -39,7 +41,33 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
+    // Check role: only drivers and admins can use this app
+    try {
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      final role = profileData?['role'] as String?;
+      if (role != 'driver' && role != 'admin') {
+        debugPrint('[Splash] Non-driver role detected: $role — signing out');
+        await Supabase.instance.client.auth.signOut();
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('[Splash] Profile role check error: $e');
+    }
+
     // Logged in → check what step they're on
+    unawaited(NotificationService.syncToken());
+    NotificationStore.instance.syncWithSupabase(user.id);
+    NotificationService.startRealtimeMessageListener(user.id);
     try {
       final driver = await Supabase.instance.client
           .from('drivers')

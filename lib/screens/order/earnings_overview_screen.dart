@@ -5,9 +5,7 @@ import '../../widgets/floating_bottom_nav_bar.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'earnings_history_screen.dart';
 import 'order_details_screen.dart';
-import '../../services/wallet_service.dart';
 import 'dart:async';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'dart:io';
 import 'dart:convert';
@@ -21,9 +19,7 @@ class EarningsOverviewScreen extends StatefulWidget {
 
 class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
   late Future<List<Map<String, dynamic>>> _ordersFuture;
-  double _walletBalance = 0.0;
 
-  bool? _isStripeLinked;
   RealtimeChannel? _orderChannel;
 
   @override
@@ -68,24 +64,6 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
 
   Future<void> _loadData() async {
     _loadOrders();
-    await _loadBalance();
-    await _checkStripe();
-  }
-
-  Future<void> _checkStripe() async {
-    final status = await WalletService.checkStripeStatus();
-    if (mounted) {
-      setState(() => _isStripeLinked = status);
-    }
-  }
-
-  Future<void> _loadBalance() async {
-    final balance = await WalletService.getWalletBalance();
-    if (mounted) {
-      setState(() {
-        _walletBalance = balance;
-      });
-    }
   }
 
   void _loadOrders() {
@@ -303,29 +281,6 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                 Column(
                                   children: [
                                     Text(
-                                      l10n.earningsWalletBalance,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        color: Color(0xFF888888),
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '\$${_walletBalance.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w900,
-                                        color: Color(0xFF1F1F1F),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Container(width: 1, height: 30, color: const Color(0xFFEEEEEE)),
-                                Column(
-                                  children: [
-                                    Text(
                                       l10n.earningsTodayCaps,
                                       style: const TextStyle(
                                         fontSize: 10,
@@ -345,73 +300,35 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                                     ),
                                   ],
                                 ),
+                                Container(width: 1, height: 30, color: const Color(0xFFEEEEEE)),
+                                Column(
+                                  children: [
+                                    Text(
+                                      l10n.earningsTotalDeliveriesCaps,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF888888),
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '$deliveries',
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF1F1F1F),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Stripe Onboarding Card
-                      if (_isStripeLinked == false)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF3E0),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFFFB74D), width: 1),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFE65100)),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    l10n.earningsActionRequired,
-                                    style: const TextStyle(
-                                      color: Color(0xFFE65100),
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                l10n.earningsStripeLinkBankDesc,
-                                style: const TextStyle(
-                                  color: Color(0xFF5D4037),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 44,
-                                child: ElevatedButton(
-                                  onPressed: _startStripeOnboarding,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFE65100),
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                  child: Text(
-                                    l10n.earningsLinkBankAccount,
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (_isStripeLinked == false) const SizedBox(height: 20),
 
                       // Weekly Chart Card (Static for visualization)
                       Container(
@@ -507,39 +424,6 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
-
-                      // Summary Stats
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.earningsTotalDeliveriesCaps,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF888888),
-                                        fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '$deliveries',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF1F1F1F),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 32),
 
                       Row(
@@ -586,39 +470,6 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
                     ],
                   ),
                 ),
-                ),
-              ),
-
-              // ── Fixed Cash Out Now button at bottom ──
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFBFBFB),
-                  border: Border(
-                    top: BorderSide(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 58,
-                  child: ElevatedButton(
-                    onPressed: (_walletBalance > 0 && _isStripeLinked == true) ? () => _showCashOutDialog(context) : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF4D00),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      l10n.earningsCashOutNow,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                    ),
-                  ),
                 ),
               ),
             ],
@@ -811,131 +662,5 @@ class _EarningsOverviewScreenState extends State<EarningsOverviewScreen> {
         ),
       ),
     );
-  }
-
-  void _showCashOutDialog(BuildContext context) {
-    final TextEditingController amountController = TextEditingController();
-    bool isProcessing = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final l10n = AppLocalizations.of(context)!;
-          return AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Text(
-              l10n.earningsCashOut,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.earningsAvailableAmount('\$${_walletBalance.toStringAsFixed(2)}'),
-                  style: const TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: amountController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-                  decoration: InputDecoration(
-                    hintText: l10n.earningsAmountHint,
-                    prefixText: '\$ ',
-                    filled: true,
-                    fillColor: const Color(0xFFFBFBFB),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: isProcessing ? null : () => Navigator.pop(context),
-                child: Text(l10n.common_cancel, style: const TextStyle(color: Color(0xFF888888), fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: isProcessing ? null : () async {
-                    final amount = double.tryParse(amountController.text) ?? 0.0;
-                    if (amount <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.earningsEnterValidAmount)));
-                      return;
-                    }
-                    if (amount > _walletBalance) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.earningsInsufficientBalance)));
-                      return;
-                    }
-
-                    setDialogState(() => isProcessing = true);
-                    
-                    final result = await WalletService.requestPayout(amount);
-                    
-                    if (!context.mounted) return;
-                    Navigator.pop(context); // Close dialog
-                    
-                    String displayMsg = result['message'];
-                    if (displayMsg.contains('Insufficient balance')) {
-                      displayMsg = l10n.earningsStripeErrorInsufficient;
-                    }
-                    
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(displayMsg),
-                        backgroundColor: result['success'] ? Colors.green : Colors.red,
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                    if (result['success']) {
-                      _loadData(); // Refresh balance and orders
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF4D00),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: isProcessing 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text(l10n.earningsConfirm, style: const TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
-          );
-        }
-      ),
-    );
-  }
-
-  Future<void> _startStripeOnboarding() async {
-    final l10n = AppLocalizations.of(context)!;
-    final result = await WalletService.getStripeOnboardingUrlWithResult();
-    if (!mounted) return;
-    
-    if (result['url'] != null) {
-      final uri = Uri.parse(result['url']);
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.earningsOnboardingLinkError)));
-      }
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${l10n.earningsGeneratingLinkFailed} ${result['error'] ?? ''}'),
-          backgroundColor: Colors.red,
-        )
-      );
-    }
   }
 }

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import '../../services/otp_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/notification_store.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String email;
@@ -103,6 +104,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (mounted) {
         if (!widget.isRecovery) {
           unawaited(NotificationService.syncToken());
+          final driverId = Supabase.instance.client.auth.currentUser?.id;
+          if (driverId != null) {
+            NotificationStore.instance.syncWithSupabase(driverId);
+          }
         }
 
         ScaffoldMessenger.of(context).showSnackBar(

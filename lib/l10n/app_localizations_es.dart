@@ -89,6 +89,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get loginEmptyFields => 'Por favor ingresa tu correo y contraseña';
 
   @override
+  String get loginCustomerAccountError =>
+      'Esta es una cuenta de cliente. Por favor, use la aplicación de cliente.';
+
+  @override
   String get loginFailedVerification =>
       'Error al enviar el código de verificación. Inténtalo de nuevo.';
 
@@ -559,7 +563,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dashboardSearchingNearbyDesc =>
-      'Los nuevos pedidos dentro de 25 km aparecerán aquí automáticamente.';
+      'Los nuevos pedidos dentro de 15 millas aparecerán aquí automáticamente.';
 
   @override
   String get dashboardViewAllOrders => 'Ver Todos los Pedidos';
@@ -613,7 +617,7 @@ class AppLocalizationsEs extends AppLocalizations {
       other: 'pedidos',
       one: 'pedido',
     );
-    return '$count $_temp0 dentro de 25 km';
+    return '$count $_temp0 dentro de 15 millas';
   }
 
   @override
@@ -867,7 +871,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get assignedShowingNearbyFallback =>
-      'Mostrando pedidos dentro de 25 km de tu ubicación (reserva).';
+      'Mostrando pedidos dentro de 15 millas de tu ubicación (reserva).';
 
   @override
   String assignedShowingNearbyConfigured(int count) {

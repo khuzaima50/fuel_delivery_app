@@ -89,6 +89,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginEmptyFields => 'Please enter email and password';
 
   @override
+  String get loginCustomerAccountError =>
+      'This is a customer account. Please use the Customer App.';
+
+  @override
   String get loginFailedVerification =>
       'Failed to send verification code. Please try again.';
 
@@ -549,7 +553,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dashboardSearchingNearbyDesc =>
-      'New orders within 25 km will appear here automatically.';
+      'New orders within 15 miles will appear here automatically.';
 
   @override
   String get dashboardViewAllOrders => 'View All Orders';
@@ -602,7 +606,7 @@ class AppLocalizationsEn extends AppLocalizations {
       other: 'orders',
       one: 'order',
     );
-    return '$count $_temp0 within 25 km';
+    return '$count $_temp0 within 15 miles';
   }
 
   @override
@@ -853,7 +857,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assignedShowingNearbyFallback =>
-      'Showing orders within 25 km of your location (fallback).';
+      'Showing orders within 15 miles of your location (fallback).';
 
   @override
   String assignedShowingNearbyConfigured(int count) {

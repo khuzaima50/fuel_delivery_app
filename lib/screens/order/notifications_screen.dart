@@ -152,7 +152,31 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
           final l10n = AppLocalizations.of(context)!;
           if (snapshot.hasError) {
-            return Center(child: Text('${l10n.common_error}: ${snapshot.error}'));
+            debugPrint('[NotificationsScreen] Error: ${snapshot.error}');
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    l10n.common_error,
+                    style: const TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _loadNotifications();
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4D00),
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(l10n.common_retry),
+                  ),
+                ],
+              ),
+            );
           }
 
           final allNotifications = snapshot.data ?? [];

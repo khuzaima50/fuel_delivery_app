@@ -51,24 +51,72 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final res = await Supabase.instance.client.auth.signUp(
         email: email,
         password: password,
-        data: {'full_name': name, 'phone': phone},
+        data: {'full_name': name, 'phone': phone, 'role': 'driver'},
       );
 
-      if (res.user != null) {
+      final user = res.user;
+      if (user != null) {
+        // Check if this user is a customer
+        String? role;
+        try {
+          final profileData = await Supabase.instance.client
+              .from('profiles')
+              .select('role')
+              .eq('id', user.id)
+              .maybeSingle();
+          role = profileData?['role'] as String?;
+        } catch (_) {}
+
+        if (role == 'customer') {
+          await Supabase.instance.client.auth.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.loginCustomerAccountError),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Check identities — if user already existed, identities will be empty
+        if (user.identities != null && user.identities!.isEmpty) {
+          await Supabase.instance.client.auth.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(l10n.loginCustomerAccountError),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Upsert role into drivers & profiles table
+        try {
+          await Supabase.instance.client.from('drivers').upsert({
+            'id': user.id,
+            'full_name': name,
+            'email': email,
+            'phone': phone,
+          }, onConflict: 'id');
+
+          await Supabase.instance.client.from('profiles').upsert({
+            'id': user.id,
+            'full_name': name,
+            'phone_number': phone,
+            'role': 'driver',
+          }, onConflict: 'id');
+        } catch (e) {
+          debugPrint('SignUp DB upsert warning: $e');
+        }
+
         final otpSent = await OtpService.sendOtp(email);
 
         if (mounted) {
-          if (otpSent) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => OtpVerificationScreen(
-                  email: email,
-                  nextScreen: const DocumentVerificationScreen(),
-                ),
-              ),
-            );
-          } else {
+          if (!otpSent) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(l10n.signUpAccountCreatedPartial),
@@ -76,6 +124,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             );
           }
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OtpVerificationScreen(
+                email: email,
+                nextScreen: const DocumentVerificationScreen(),
+              ),
+            ),
+          );
         }
       }
     } on AuthException catch (e) {

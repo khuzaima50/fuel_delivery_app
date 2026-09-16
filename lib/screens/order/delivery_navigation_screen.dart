@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -35,28 +35,48 @@ class DeliveryNavigationScreen extends StatefulWidget {
 }
 
 class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
-    with TickerProviderStateMixin {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   // ── Map ────────────────────────────────────────────────────────────────────
   GoogleMapController? _mapController;
-  final Set<Marker> _markers = {};
-  final Set<Polyline> _polylines = {};
+  Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
   final List<LatLng> _routePoints = [];
+  int _currentPolylineIndex = 0;
 
   // ── GPS stream ────────────────────────────────────────────────────────────
   final DriverLocationStream _gpsTracker = DriverLocationStream();
 
-  // ── Smooth marker animation ───────────────────────────────────────────────
-  AnimationController? _markerAnimController;
-  Animation<double>? _markerAnim;
-  LatLng? _prevMarkerPos;
-  LatLng? _currentMarkerPos;
+  // ── 60 FPS Smooth marker lerp & Turn-by-Turn camera animation ─────────────
+  late AnimationController _markerAnimController;
+  LatLng? _animStartPos;
+  LatLng? _animTargetPos;
+  double _animStartBearing = 0.0;
+  double _animTargetBearing = 0.0;
+  LatLng? _currentAnimatedPos;
+  double _currentAnimatedBearing = 0.0;
+  int _lastFixTimeMs = 0;
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── Navigation Arrow & Compass ────────────────────────────────────────────
+  LatLng? _currentMarkerPos;
+  double _currentBearing = 0.0;
+  Position? _lastGpsFix;
+  BitmapDescriptor? _driverArrowIcon;
+  bool _isCameraFollowing = true;
+  StreamSubscription<CompassEvent>? _compassSub;
+  int _lastCompassMs = 0;
+  double _lastCompassHeading = -999;
+  int _gpsFixCount = 0;
+  double _currentAccuracy = 0.0;
+
+  // ── State ───────────────────────────────────────────────────────────
   bool _locationPermissionDenied = false;
   bool _gpsDisabled = false;
   bool _isLoadingRoute = false;
   bool _routeFetched = false;
   bool _isReleasing = false; // guard for Release Order button
+
+  // ── Order status realtime subscription ─────────────────────────────────
+  RealtimeChannel? _orderStatusChannel;
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   double _distanceMiles = 0.0;
@@ -72,22 +92,156 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
   // ── Directions API (direct HTTP call — no third-party package) ──────────
   final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
 
-
-
   bool _isResolvingDestination = false;
 
   @override
   void initState() {
     super.initState();
 
+    // 60 FPS marker lerp controller
     _markerAnimController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 1000),
     );
+    _markerAnimController.addListener(_onMarkerAnimTick);
 
     _destinationLabel = widget.order?['delivery_address']?.toString() ?? 'Customer Location';
+
+    // Load navigation-style vehicle arrow icon
+    NavigationMarkerHelper.getDriverArrowIcon().then((icon) {
+      if (mounted) {
+        setState(() {
+          _driverArrowIcon = icon;
+          if (_currentMarkerPos != null) {
+            _updateDriverMarker(_currentMarkerPos!, _currentBearing);
+          }
+        });
+      }
+    });
+
+    // Fast driver location from cache — centers map on driver immediately
+    Geolocator.getLastKnownPosition().then((pos) {
+      if (pos != null && mounted && _currentMarkerPos == null) {
+        setState(() {
+          final latLng = LatLng(pos.latitude, pos.longitude);
+          _currentMarkerPos = latLng;
+          _currentBearing = pos.heading >= 0.0 ? pos.heading : 0.0;
+          _updateDriverMarker(latLng, _currentBearing);
+        });
+        if (_mapController != null) {
+          if (_destLat != null && _destLng != null) {
+            final bounds = LatLngBounds(
+              southwest: LatLng(
+                math.min(pos.latitude, _destLat!),
+                math.min(pos.longitude, _destLng!),
+              ),
+              northeast: LatLng(
+                math.max(pos.latitude, _destLat!),
+                math.max(pos.longitude, _destLng!),
+              ),
+            );
+            _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+          } else {
+            _mapController!.animateCamera(
+              CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 16));
+          }
+        }
+      }
+    });
+
+    WidgetsBinding.instance.addObserver(this);
     _resolveDestination();
     _startLocationStream();
+    _initCompass();
+    _subscribeToOrderStatus(); // listen for cancellation
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[DeliveryNavigation] App resumed -> checking GPS stream status');
+      if (!_gpsTracker.isActive) {
+        _gpsTracker.restart(
+          dbThrottleSeconds: 2,
+          onPosition: _onNewPosition,
+        );
+      }
+    }
+  }
+
+  void _initCompass() {
+    _compassSub = FlutterCompass.events?.listen((CompassEvent event) {
+      if (!mounted) return;
+      final heading = event.heading ?? event.headingForCameraMode;
+      if (heading == null || heading.isNaN) return;
+
+      // Normalize heading to standard [0, 360)
+      final normalizedHeading = (heading % 360.0 + 360.0) % 360.0;
+
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (nowMs - _lastCompassMs < 50) return; // ~20 fps for responsive rotation
+      _lastCompassMs = nowMs;
+
+      if (_lastCompassHeading < 0) {
+        _lastCompassHeading = normalizedHeading;
+      }
+
+      // Angular difference (shortest path)
+      double diff = (normalizedHeading - _lastCompassHeading) % 360.0;
+      if (diff > 180.0) diff -= 360.0;
+      if (diff < -180.0) diff += 360.0;
+
+      // Ignore micro noise (< 0.8 degrees)
+      if (diff.abs() < 0.8) return;
+
+      // Smooth EMA filter (alpha = 0.25) so phone rotation smoothly turns the beam
+      final smoothedHeading = (_lastCompassHeading + diff * 0.25 + 360.0) % 360.0;
+      _lastCompassHeading = smoothedHeading;
+
+      // When standing still or moving slowly (< 1.8 m/s), rotating phone rotates the blue beam in real time!
+      final speed = _lastGpsFix?.speed ?? 0.0;
+      if (speed < 1.8) {
+        _currentBearing = smoothedHeading;
+        _currentAnimatedBearing = smoothedHeading;
+        _animStartBearing = smoothedHeading;
+        _animTargetBearing = smoothedHeading;
+
+        final pos = _currentAnimatedPos ?? _currentMarkerPos;
+        if (pos != null) {
+          _updateDriverMarker(pos, smoothedHeading);
+          if (_isCameraFollowing && _mapController != null) {
+            _mapController?.moveCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                  target: pos,
+                  zoom: 17.5,
+                  tilt: 35.0,
+                  bearing: smoothedHeading,
+                ),
+              ),
+            );
+          }
+        }
+      }
+    });
+  }
+
+
+  void _recenterCamera() {
+    setState(() => _isCameraFollowing = true);
+    final pos = _currentMarkerPos;
+    if (pos != null && _mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: pos,
+            zoom: 16.5,
+            tilt: 45,
+            bearing: _currentBearing,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _resolveDestination() async {
@@ -140,7 +294,28 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
           _destLat = lat;
           _destLng = lng;
           _isResolvingDestination = false;
+          // Propagate resolved coords to order map so child screens have them
+          widget.order?['delivery_lat'] = lat;
+          widget.order?['delivery_lng'] = lng;
         });
+      }
+      // Animate camera to fit driver + destination if map is ready
+      if (_mapController != null) {
+        if (_currentMarkerPos != null) {
+          final bounds = LatLngBounds(
+            southwest: LatLng(
+              math.min(_currentMarkerPos!.latitude, lat),
+              math.min(_currentMarkerPos!.longitude, lng),
+            ),
+            northeast: LatLng(
+              math.max(_currentMarkerPos!.latitude, lat),
+              math.max(_currentMarkerPos!.longitude, lng),
+            ),
+          );
+          _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+        } else {
+          _mapController!.animateCamera(CameraUpdate.newLatLngZoom(LatLng(lat, lng), 14));
+        }
       }
       _fetchRouteEarly();
     } else {
@@ -150,44 +325,115 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     }
   }
 
-  Future<void> _fetchRouteEarly() async {
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
-      );
-      if (!mounted) return;
-      final latLng = LatLng(pos.latitude, pos.longitude);
-      _currentMarkerPos = latLng;
-      _updateDriverMarker(latLng, pos.heading);
-      if (_destLat != null && _destLng != null && !_routeFetched) {
-        debugPrint('[DeliveryNav] Early GPS fix – triggering route fetch');
-        _fetchRoute(pos);
-      }
-    } catch (e) {
-      debugPrint('[DeliveryNav] Early GPS fix failed: $e');
-      try {
-        final last = await Geolocator.getLastKnownPosition();
-        if (last != null && mounted) {
-          final latLng = LatLng(last.latitude, last.longitude);
-          _currentMarkerPos = latLng;
-          _updateDriverMarker(latLng, last.heading);
-          if (_destLat != null && _destLng != null && !_routeFetched) {
-            _fetchRoute(last);
-          }
+  /// Fetch route using an already-available position — NO getCurrentPosition().
+  void _fetchRouteEarly() {
+    if (_routeFetched || _isLoadingRoute) return;
+    if (_destLat == null || _destLng == null) return;
+
+    final gpsFix = _lastGpsFix;
+    if (gpsFix != null) {
+      debugPrint('[DeliveryNav] Fetching route from stream GPS fix');
+      _fetchRoute(gpsFix);
+    } else {
+      // Fall back to getLastKnownPosition (safe — does NOT interfere with stream)
+      Geolocator.getLastKnownPosition().then((pos) {
+        if (pos != null && mounted && !_routeFetched) {
+          final latLng = LatLng(pos.latitude, pos.longitude);
+          _currentMarkerPos ??= latLng;
+          _updateDriverMarker(latLng, pos.heading >= 0.0 ? pos.heading : 0.0);
+          debugPrint('[DeliveryNav] Fetching route from last known position');
+          _fetchRoute(pos);
         }
-      } catch (_) {}
+      });
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _markerAnimController.stop();
+    _markerAnimController.dispose();
     _gpsTracker.dispose();
-    _markerAnimController?.dispose();
+    _compassSub?.cancel();
     _mapController?.dispose();
+    _orderStatusChannel?.unsubscribe();
     super.dispose();
+  }
+
+  // ── Subscribe to order status (cancellation detection) ────────────────────
+  void _subscribeToOrderStatus() {
+    final orderId = widget.order?['id']?.toString();
+    if (orderId == null) return;
+
+    try {
+      _orderStatusChannel?.unsubscribe();
+      _orderStatusChannel = Supabase.instance.client
+          .channel('dnav_order_status_$orderId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'orders',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: orderId,
+            ),
+            callback: (payload) {
+              final newStatus = payload.newRecord['status']?.toString().toLowerCase() ?? '';
+              debugPrint('[DeliveryNav] Order status update: $newStatus');
+              if (!mounted) return;
+
+              if (newStatus == 'cancelled') {
+                _gpsTracker.dispose();
+                _orderStatusChannel?.unsubscribe();
+                _showCancellationDialog();
+              }
+            },
+          )
+          .subscribe((status, error) {
+            debugPrint('[DeliveryNav] Order channel: $status');
+          });
+    } catch (e) {
+      debugPrint('[DeliveryNav] Realtime subscribe error: $e');
+    }
+  }
+
+  void _showCancellationDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.cancel_rounded, color: Colors.red, size: 24),
+            SizedBox(width: 10),
+            Text('Order Cancelled', style: TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+        content: const Text(
+          'This order has been cancelled by the customer. You will be returned to the orders list.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).popUntil(
+                (route) => route.settings.name == '/assigned-orders' || route.isFirst,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF4D00),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   double? _parseDouble(dynamic v) =>
@@ -195,6 +441,13 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
 
   // ── Start GPS stream ──────────────────────────────────────────────────────
   Future<void> _startLocationStream() async {
+    // Seed immediate initial position fix so GPS badge turns green instantly
+    Geolocator.getLastKnownPosition().then((pos) {
+      if (pos != null && mounted && _gpsFixCount == 0) {
+        _onNewPosition(pos);
+      }
+    });
+
     final ok = await _gpsTracker.start(
       dbThrottleSeconds: 3,
       onPosition: _onNewPosition,
@@ -209,67 +462,174 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
     }
   }
 
-  // ── Handle each new GPS fix ───────────────────────────────────────────────
+  // ── 60 FPS Animation Ticker ────────────────────────────────────────────────
+  // Fires on every frame tick (~60 times per second) to update vehicle marker,
+  // dynamically melt/trim the polyline behind the bumper, and smoothly track camera.
+  void _onMarkerAnimTick() {
+    if (!mounted) return;
+    final startPos = _animStartPos;
+    final targetPos = _animTargetPos;
+    if (startPos == null || targetPos == null) return;
+
+    final t = _markerAnimController.value;
+
+    // 1. Fluid position lerp
+    final currentPos = LocationService.interpolateLatLng(startPos, targetPos, t);
+
+    // 2. Shortest-path rotational bearing lerp
+    final currentBearing = LocationService.interpolateAngle(
+      _animStartBearing,
+      _animTargetBearing,
+      t,
+    );
+
+    _currentAnimatedPos = currentPos;
+    _currentAnimatedBearing = currentBearing;
+
+    // 3. 60 FPS Vehicle marker update
+    _updateDriverMarker(currentPos, currentBearing);
+
+    // 4. Dynamic Polyline Rolling & Trimming (Uber / Careem / Foodpanda style)
+    if (_routeFetched && _routePoints.isNotEmpty) {
+      _updatePolylineTrimmed(currentPos);
+    }
+
+    // 5. Turn-by-Turn 60 FPS Camera Follow
+    if (_isCameraFollowing && _mapController != null) {
+      _mapController?.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: currentPos,
+            zoom: 17.5,
+            tilt: 35.0,
+            bearing: currentBearing,
+          ),
+        ),
+      );
+    }
+  }
+
   void _onNewPosition(Position pos) {
     if (!mounted) return;
+    if (pos.latitude == 0.0 && pos.longitude == 0.0) return;
+
+    // Filter out grossly inaccurate GPS fixes (> 30m)
+    if (pos.accuracy > 30.0 && _currentMarkerPos != null) {
+      debugPrint('[GPS Filter] Low accuracy fix (${pos.accuracy.toStringAsFixed(1)}m) — ignoring');
+      return;
+    }
 
     final newLatLng = LatLng(pos.latitude, pos.longitude);
-
-    // Smooth marker interpolation
-    final from = _currentMarkerPos ?? newLatLng;
-    _prevMarkerPos = from;
-    _currentMarkerPos = newLatLng;
-
-    _markerAnimController?.reset();
-    final prevPos = _prevMarkerPos;
-    final currPos = _currentMarkerPos;
-    if (prevPos != null && currPos != null && _markerAnimController != null) {
-      _markerAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-            parent: _markerAnimController!, curve: Curves.easeInOut),
-      )..addListener(() {
-          if (!mounted) return;
-          final interp = _lerpLatLng(
-              prevPos, currPos, _markerAnim?.value ?? 1.0);
-          _updateDriverMarker(interp, pos.heading);
-        });
-      _markerAnimController?.forward();
-    } else {
-      _updateDriverMarker(newLatLng, pos.heading);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    int animDurationMs = 1000;
+    if (_lastFixTimeMs > 0) {
+      animDurationMs = (nowMs - _lastFixTimeMs).clamp(500, 2000);
     }
+    _lastFixTimeMs = nowMs;
+
+    final currentPos = _currentAnimatedPos ?? _currentMarkerPos ?? newLatLng;
+    final currentBearing = _currentAnimatedBearing != 0.0 ? _currentAnimatedBearing : _currentBearing;
+
+    final distanceMoved = Geolocator.distanceBetween(
+      currentPos.latitude,
+      currentPos.longitude,
+      newLatLng.latitude,
+      newLatLng.longitude,
+    );
+
+    final rawSpeed = pos.speed >= 0.0 ? pos.speed : 0.0;
+
+    // Driver Movement Detection:
+    // Move marker if distance >= 1.2m (walking / driving) OR speed >= 0.3 m/s (~1.0 km/h)
+    final isDriverMoving = (distanceMoved >= 1.2) || (rawSpeed >= 0.3);
+    final targetPos = isDriverMoving ? newLatLng : currentPos;
+
+    // Heading calculation & shortest rotation path
+    double targetBearing = currentBearing;
+    if (isDriverMoving) {
+      if (pos.heading >= 0.0 && pos.heading <= 360.0 && rawSpeed >= 0.5) {
+        targetBearing = pos.heading;
+      } else if (distanceMoved >= 1.0) {
+        targetBearing = LocationService.calculateBearing(
+          currentPos.latitude,
+          currentPos.longitude,
+          newLatLng.latitude,
+          newLatLng.longitude,
+        );
+      }
+    }
+
+    _animStartPos = currentPos;
+    _animTargetPos = targetPos;
+    _animStartBearing = currentBearing;
+    _animTargetBearing = targetBearing;
+
+    _markerAnimController.duration = Duration(milliseconds: animDurationMs);
+    _markerAnimController.forward(from: 0.0);
+
+    setState(() {
+      _lastGpsFix = pos;
+      _currentMarkerPos = targetPos;
+      _currentBearing = targetBearing;
+      _gpsFixCount++;
+      _currentAccuracy = pos.accuracy;
+    });
 
     // Stats
     if (_destLat != null && _destLng != null) _updateStats(pos);
 
-    // Camera follow
-    _mapController?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(
-        target: newLatLng,
-        zoom: 16,
-        tilt: 45,
-        bearing: pos.heading,
-      )),
-    );
-
-    // Smart polyline refresh
+    // Smart polyline refresh (if driver deviates > 70 m off route)
     if (_routeFetched && _routePoints.isNotEmpty) {
       final dev = _distanceToPolyline(newLatLng, _routePoints);
-      if (dev > 100) {
-        debugPrint('[Route Fetch] Deviation ${dev.toStringAsFixed(0)} m — re-fetching');
+      if (dev > 70) {
+        debugPrint('[Route Fetch] Deviation ${dev.toStringAsFixed(0)} m — re-fetching route');
         _fetchRoute(pos);
       }
-    } else if (!_routeFetched && !_isLoadingRoute &&
-        _destLat != null && _destLng != null) {
+    } else if (!_routeFetched && !_isLoadingRoute && _destLat != null && _destLng != null) {
       _fetchRoute(pos);
     }
   }
 
-  LatLng _lerpLatLng(LatLng a, LatLng b, double t) => LatLng(
-        lerpDouble(a.latitude, b.latitude, t)!,
-        lerpDouble(a.longitude, b.longitude, t)!,
-      );
+  /// Trims route polyline behind driver so polyline erases as driver moves forward (Google Maps style)
+  void _updatePolylineTrimmed(LatLng driverPos) {
+    if (!mounted || _routePoints.isEmpty) return;
+
+    final closestIdx = LocationService.findClosestPolylineIndex(
+      driverPos,
+      _routePoints,
+      _currentPolylineIndex,
+    );
+
+    if (closestIdx > _currentPolylineIndex) {
+      _currentPolylineIndex = closestIdx;
+    }
+
+    final List<LatLng> activePoints = [driverPos];
+    if (_currentPolylineIndex + 1 < _routePoints.length) {
+      activePoints.addAll(_routePoints.sublist(_currentPolylineIndex + 1));
+    } else if (_routePoints.isNotEmpty) {
+      activePoints.add(_routePoints.last);
+    }
+
+    setState(() {
+      _polylines = {
+        Polyline(
+          polylineId: const PolylineId('route'),
+          color: const Color(0xFF4285F4),
+          points: activePoints,
+          width: 6,
+          jointType: JointType.round,
+          startCap: Cap.roundCap,
+          endCap: Cap.roundCap,
+        ),
+      };
+    });
+  }
+
+
 
   double _distanceToPolyline(LatLng point, List<LatLng> poly) {
+    if (poly.isEmpty) return double.infinity;
     double min = double.infinity;
     for (final pt in poly) {
       final d = Geolocator.distanceBetween(
@@ -281,20 +641,25 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
 
   void _updateDriverMarker(LatLng pos, double heading) {
     if (!mounted) return;
+
+    final updated = Set<Marker>.of(_markers.where((m) => m.markerId.value != 'driver'));
+    updated.add(Marker(
+      markerId: const MarkerId('driver'),
+      position: pos,
+      icon: _driverArrowIcon ??
+          BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+      anchor: const Offset(0.5, 0.58),
+      rotation: heading,
+      flat: false,
+      zIndexInt: 2,
+      infoWindow: const InfoWindow(title: 'Your Location'),
+    ));
+
     setState(() {
-      _markers.removeWhere((m) => m.markerId.value == 'driver');
-      _markers.add(Marker(
-        markerId: const MarkerId('driver'),
-        position: pos,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-        anchor: const Offset(0.5, 0.5),
-        rotation: heading,
-        flat: true,
-        zIndexInt: 2,
-        infoWindow: const InfoWindow(title: 'Your Location'),
-      ));
+      _markers = updated;
     });
   }
+
 
   void _updateStats(Position pos) {
     final dLat = _destLat;
@@ -445,6 +810,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       _routePoints
         ..clear()
         ..addAll(decodedPoints);
+      _currentPolylineIndex = 0;
 
       _markers.removeWhere((m) => m.markerId.value == 'destination');
       _markers.add(Marker(
@@ -460,18 +826,11 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       setState(() {
         _routeFetched = true;
         _isLoadingRoute = false;
-        _polylines
-          ..clear()
-          ..add(Polyline(
-            polylineId: const PolylineId('route'),
-            color: const Color(0xFF4285F4),
-            points: List<LatLng>.from(decodedPoints),
-            width: 6,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-          ));
       });
+
+      final dPos = _currentMarkerPos ?? LatLng(driverPos.latitude, driverPos.longitude);
+      _updatePolylineTrimmed(dPos);
+
 
       // ── Update stats IMMEDIATELY from API data ─────────────────────────
       if (apiDistanceMeters != null && apiDistanceMeters > 0) {
@@ -542,6 +901,7 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       _routePoints
         ..clear()
         ..addAll(decodedPoints);
+      _currentPolylineIndex = 0;
 
       _markers.removeWhere((m) => m.markerId.value == 'destination');
       _markers.add(Marker(
@@ -555,18 +915,11 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
       setState(() {
         _routeFetched = true;
         _isLoadingRoute = false;
-        _polylines
-          ..clear()
-          ..add(Polyline(
-            polylineId: const PolylineId('route'),
-            color: const Color(0xFF4285F4),
-            points: List<LatLng>.from(decodedPoints),
-            width: 6,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-          ));
       });
+
+      final dPos = _currentMarkerPos ?? LatLng(driverPos.latitude, driverPos.longitude);
+      _updatePolylineTrimmed(dPos);
+
 
       if (apiDistanceMeters > 0) {
         _applyStats(
@@ -598,6 +951,10 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
         ),
       );
       controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+    } else if (_currentMarkerPos != null) {
+      controller.animateCamera(CameraUpdate.newLatLngZoom(_currentMarkerPos!, 16));
+    } else if (dLatV != null && dLngV != null) {
+      controller.animateCamera(CameraUpdate.newLatLngZoom(LatLng(dLatV, dLngV), 14));
     }
   }
 
@@ -624,9 +981,14 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
 
     final dLatV = _destLat;
     final dLngV = _destLng;
-    final LatLng initialTarget = (dLatV != null && dLngV != null)
-        ? LatLng(dLatV, dLngV)
-        : _currentMarkerPos ?? const LatLng(24.8607, 67.0011);
+    final double? fallbackLat = double.tryParse(widget.order?['delivery_lat']?.toString() ?? '');
+    final double? fallbackLng = double.tryParse(widget.order?['delivery_lng']?.toString() ?? '');
+    final LatLng initialTarget = _currentMarkerPos ??
+        ((dLatV != null && dLngV != null)
+            ? LatLng(dLatV, dLngV)
+            : (fallbackLat != null && fallbackLng != null
+                ? LatLng(fallbackLat, fallbackLng)
+                : const LatLng(37.7749, -122.4194)));
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -634,17 +996,24 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
         children: [
           // ── Map ──────────────────────────────────────────────────────────
           Positioned.fill(
-            child: GoogleMap(
-              mapType: MapType.normal,
-              initialCameraPosition:
-                  CameraPosition(target: initialTarget, zoom: 14),
-              myLocationEnabled: false,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              compassEnabled: true,
-              markers: Set<Marker>.of(_markers),
-              polylines: Set<Polyline>.of(_polylines),
-              onMapCreated: _onMapCreated,
+            child: Listener(
+              onPointerDown: (_) {
+                if (_isCameraFollowing) {
+                  setState(() => _isCameraFollowing = false);
+                }
+              },
+              child: GoogleMap(
+                mapType: MapType.normal,
+                initialCameraPosition:
+                    CameraPosition(target: initialTarget, zoom: 16),
+                myLocationEnabled: false,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                compassEnabled: true,
+                markers: Set<Marker>.of(_markers),
+                polylines: Set<Polyline>.of(_polylines),
+                onMapCreated: _onMapCreated,
+              ),
             ),
           ),
 
@@ -675,12 +1044,66 @@ class _DeliveryNavigationScreenState extends State<DeliveryNavigationScreen>
                         () => Navigator.of(context).pop(),
                         size: 18,
                       ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _gpsFixCount > 0 ? const Color(0xFF1B5E20) : const Color(0xFFB71C1C),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _gpsFixCount > 0 ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _gpsFixCount > 0
+                                  ? 'GPS: $_gpsFixCount fixes (${_currentAccuracy.toStringAsFixed(0)}m)'
+                                  : 'GPS: WAITING FIX',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
           ),
+
+          // ── Recenter Button (shows when user manually panned map) ─────────
+          if (!_isCameraFollowing)
+            Positioned(
+              right: 20,
+              bottom: 270,
+              child: FloatingActionButton.extended(
+                heroTag: 'recenter_delivery_nav',
+                onPressed: _recenterCamera,
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFFFF4D00),
+                elevation: 4,
+                icon: const Icon(Icons.navigation_rounded, size: 18),
+                label: const Text(
+                  'Re-center',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: Color(0xFFFF4D00),
+                  ),
+                ),
+              ),
+            ),
 
           // ── Bottom panel ─────────────────────────────────────────────────
           Align(

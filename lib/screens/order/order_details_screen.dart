@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -33,6 +34,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   bool _isLoadingRoute = false;
   final String _apiKey = dotenv.env['MAPS_API_KEY'] ?? '';
 
+  // Order status realtime subscription (for cancellation detection)
+  RealtimeChannel? _orderStatusChannel;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +46,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         : 'Loading...';
     _customerPhone = widget.order['customer_phone'] ?? '';
     _resolveCustomerInfo();
+    _subscribeToOrderStatus(); // listen for customer cancellation
     
     final rawStatus = widget.order['status']?.toString().toLowerCase() ?? '';
     if (rawStatus == 'delivered' || rawStatus == 'completed') {
@@ -54,17 +59,76 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   Future<void> _initActiveOrderTracking() async {
     try {
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      final driverId = widget.order['driver_id']?.toString();
+      final isDriver = currentUserId != null && driverId != null && currentUserId == driverId;
+
       Position? position;
-      try {
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 8),
-          ),
-        );
-      } catch (e) {
-        debugPrint('Error getting current position, trying last known: $e');
-        position = await Geolocator.getLastKnownPosition();
+      if (isDriver || driverId == null || driverId.isEmpty) {
+        try {
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 8),
+            ),
+          );
+        } catch (e) {
+          debugPrint('Error getting current position, trying last known: $e');
+          position = await Geolocator.getLastKnownPosition();
+        }
+      } else {
+        // Customer viewing order: fetch driver's real-time position from Supabase
+        try {
+          final loc = await Supabase.instance.client
+              .from('driver_locations')
+              .select()
+              .eq('driver_id', driverId)
+              .maybeSingle();
+
+          double? lat;
+          double? lng;
+          double heading = 0.0;
+
+          if (loc != null && loc['latitude'] != null && loc['longitude'] != null) {
+            lat = (loc['latitude'] as num).toDouble();
+            lng = (loc['longitude'] as num).toDouble();
+            heading = (loc['heading'] as num?)?.toDouble() ?? 0.0;
+          } else {
+            final d = await Supabase.instance.client
+                .from('drivers')
+                .select()
+                .eq('id', driverId)
+                .maybeSingle();
+            if (d != null && d['current_lat'] != null && d['current_lng'] != null) {
+              lat = (d['current_lat'] as num).toDouble();
+              lng = (d['current_lng'] as num).toDouble();
+            }
+          }
+
+          if (lat != null && lng != null && (lat != 0.0 || lng != 0.0)) {
+            position = Position(
+              longitude: lng,
+              latitude: lat,
+              timestamp: DateTime.now(),
+              accuracy: 10,
+              altitude: 0,
+              altitudeAccuracy: 0,
+              heading: heading,
+              headingAccuracy: 0,
+              speed: 0,
+              speedAccuracy: 0,
+            );
+          }
+        } catch (e) {
+          debugPrint('Error fetching remote driver position: $e');
+        }
+
+        // Fallback to local GPS if remote driver position is not found yet
+        if (position == null) {
+          try {
+            position = await Geolocator.getLastKnownPosition();
+          } catch (_) {}
+        }
       }
       
       if (position != null) {
@@ -77,10 +141,89 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     }
   }
 
+
   @override
   void dispose() {
+    _orderStatusChannel?.unsubscribe();
     _mapController?.dispose();
     super.dispose();
+  }
+
+  // ── Order status realtime subscription (cancellation) ─────────────────────
+  void _subscribeToOrderStatus() {
+    final orderId = widget.order['id']?.toString();
+    if (orderId == null) return;
+
+    // Only subscribe for active orders
+    final rawStatus = widget.order['status']?.toString().toLowerCase() ?? '';
+    if (rawStatus == 'delivered' || rawStatus == 'completed' || rawStatus == 'cancelled') return;
+
+    _orderStatusChannel?.unsubscribe();
+    _orderStatusChannel = Supabase.instance.client
+        .channel('ods_order_status_$orderId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: orderId,
+          ),
+          callback: (payload) {
+            final newStatus = payload.newRecord['status']?.toString().toLowerCase() ?? '';
+            debugPrint('[OrderDetails] Status update: $newStatus');
+            if (!mounted) return;
+
+            // Merge all fresh data into local map so UI reflects changes
+            payload.newRecord.forEach((k, v) => widget.order[k] = v);
+            setState(() {});
+
+            if (newStatus == 'cancelled') {
+              _orderStatusChannel?.unsubscribe();
+              _showCancellationDialog();
+            }
+          },
+        )
+        .subscribe((status, error) {
+          debugPrint('[OrderDetails] Order channel: $status');
+        });
+  }
+
+  void _showCancellationDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.cancel_rounded, color: Colors.red, size: 24),
+            SizedBox(width: 10),
+            Text('Order Cancelled', style: TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+        content: const Text(
+          'This order has been cancelled by the customer.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop(); // Go back to orders list
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF4D00),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   List<LatLng> _decodePolyline(String encoded) {
@@ -398,22 +541,40 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         (order['fuel_quantity_gallons'] != null
             ? double.tryParse(order['fuel_quantity_gallons'].toString())
             : null);
-    final String quantity = qty != null ? qty.toStringAsFixed(1) : 'N/A';
+    final String quantity = qty != null ? qty.toStringAsFixed(2) : 'N/A';
     final double? customerRating = order['customer_rating'] != null
         ? double.tryParse(order['customer_rating'].toString())
         : null;
 
     final bool isDelivered = status == 'DELIVERED' || status == 'COMPLETED';
 
-    // Prioritize requested amount for active orders, and final earnings for completed ones
-    final rawAmount = (isDelivered) 
+    // Price per gallon from DB (try multiple field names)
+    final double? pricePerGallon = double.tryParse(
+      (order['price_per_gallon'] ??
+              order['price_per_unit'] ??
+              order['fuel_price'] ??
+              order['unit_price'])
+              ?.toString() ??
+          '',
+    );
+
+    // Total amount: for completed use driver_earning, else total_amount
+    final rawAmount = isDelivered
         ? (order['driver_earning'] ?? order['total_amount'])
         : order['total_amount'];
-        
     final double amountVal = rawAmount != null
         ? (double.tryParse(rawAmount.toString()) ?? 0.0)
         : 0.0;
-    final String amount = amountVal > 0 ? amountVal.toStringAsFixed(2) : '0.00';
+
+    // If total_amount is 0 but we have qty + price, calculate an estimate for display
+    final double estimatedTotal =
+        (amountVal <= 0 && qty != null && pricePerGallon != null)
+            ? qty * pricePerGallon
+            : amountVal;
+    final bool isEstimate = amountVal <= 0 && estimatedTotal > 0;
+    final String amount = estimatedTotal > 0
+        ? estimatedTotal.toStringAsFixed(2)
+        : '0.00';
 
     final scheduledTime = order['scheduled_time'];
     final dropOffNotes = (
@@ -683,9 +844,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               ),
               const SizedBox(height: 20),
               
-              // Total Expected Earnings or Cost
+              // ── Order Breakdown Card ──────────────────────────────────────
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -698,27 +859,80 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    Text(
-                      l10n.orderDetailsOrderTotal,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF888888),
-                        letterSpacing: 0.8,
+                    // Quantity row
+                    if (qty != null) ...[  
+                      _buildBreakdownRow(
+                        Icons.local_gas_station_outlined,
+                        'Fuel Quantity',
+                        '${qty.toStringAsFixed(2)} Gal',
+                        const Color(0xFF888888),
                       ),
-                    ),
-                    Text(
-                      isDelivered
-                          ? (amountVal > 0 ? '\$$amount' : l10n.orderDetailsCompletedCheck)
-                          : (amountVal > 0 ? '\$$amount' : l10n.orderDetailsPending),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFF4D00),
+                      const SizedBox(height: 10),
+                    ],
+                    // Price per gallon row
+                    if (pricePerGallon != null && pricePerGallon > 0) ...[  
+                      _buildBreakdownRow(
+                        Icons.attach_money_rounded,
+                        'Price / Gallon',
+                        '\$${pricePerGallon.toStringAsFixed(2)}',
+                        const Color(0xFF888888),
                       ),
+                      const Divider(height: 20, color: Color(0xFFF2F2F2)),
+                    ],
+                    // Total row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.receipt_long_rounded,
+                                color: Color(0xFFFF4D00), size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              isDelivered
+                                  ? (l10n.orderDetailsOrderTotal)
+                                  : l10n.orderDetailsOrderTotal,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF555555),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            if (isEstimate)
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3CD),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'EST.',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF856404)),
+                                ),
+                              ),
+                          ],
+                        ),
+                        Text(
+                          estimatedTotal > 0
+                              ? '\$$amount'
+                              : isDelivered
+                                  ? l10n.orderDetailsCompletedCheck
+                                  : l10n.orderDetailsPending,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFFFF4D00),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -880,6 +1094,27 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                 ),
                                 onMapCreated: (c) {
                                   _mapController = c;
+                                  // If route/markers are already resolved, fit bounds immediately
+                                  if (_markers.length >= 2) {
+                                    final positions = _markers.map((m) => m.position).toList();
+                                    double minLat = positions.map((p) => p.latitude).reduce(math.min);
+                                    double maxLat = positions.map((p) => p.latitude).reduce(math.max);
+                                    double minLng = positions.map((p) => p.longitude).reduce(math.min);
+                                    double maxLng = positions.map((p) => p.longitude).reduce(math.max);
+                                    if (minLat != maxLat || minLng != maxLng) {
+                                      Future.delayed(const Duration(milliseconds: 150), () {
+                                        if (mounted) {
+                                          _mapController?.animateCamera(CameraUpdate.newLatLngBounds(
+                                            LatLngBounds(
+                                              southwest: LatLng(minLat, minLng),
+                                              northeast: LatLng(maxLat, maxLng),
+                                            ),
+                                            50,
+                                          ));
+                                        }
+                                      });
+                                    }
+                                  }
                                 },
                                 markers: _markers,
                                 polylines: _polylines,
@@ -1040,7 +1275,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: (status == 'COMPLETED' || status == 'DELIVERED')
+      bottomNavigationBar: (status == 'COMPLETED' || status == 'DELIVERED' || status == 'CANCELLED')
           ? null
           : SafeArea(
               child: Container(
@@ -1130,6 +1365,41 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildBreakdownRow(
+    IconData icon,
+    String label,
+    String value,
+    Color color,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF1F1F1F),
+          ),
+        ),
+      ],
     );
   }
 

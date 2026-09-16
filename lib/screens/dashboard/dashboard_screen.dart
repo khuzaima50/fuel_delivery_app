@@ -7,13 +7,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../services/location_service.dart';
 import '../../services/notification_service.dart';
-import '../order/notifications_screen.dart';
 import '../order/assigned_orders_screen.dart';
 import '../order/delivery_navigation_screen.dart';
 import '../order/order_details_screen.dart';
 import '../profile/settings_screen.dart';
 import '../../services/driver_database_service.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
+import '../../widgets/notification_bell.dart';
 import '../../services/service_area_service.dart';
 
 
@@ -24,7 +24,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
   // Static flag: survives pushReplacement — welcome notification only fires once per app session
   static bool _welcomeShown = false;
 
@@ -57,10 +57,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadServiceAreas();
     _scheduleFetch();
     _startLocationWatch();
     _subscribeNearbyOrders();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Refresh background data quietly on resume without resetting UI/navigation
+      _scheduleFetch();
+    }
   }
 
   /// Fetches active service areas once on screen load.
@@ -72,6 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounceTimer?.cancel();
     _watchdogTimer?.cancel();
     _nearbyChannel?.unsubscribe();
@@ -85,10 +96,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
       if (perm == LocationPermission.deniedForever) return;
-      final pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+      Position? pos = await Geolocator.getLastKnownPosition();
+      pos ??= await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 5),
+          ),
+      );
       if (mounted) {
         setState(() => _driverPosition = pos);
+        // Sync initial position to DB if driver is online
+        if (_isOnline) {
+          LocationService.updateDriverLocationInDb(pos.latitude, pos.longitude)
+              .catchError((_) {}); // Fire-and-forget, non-blocking
+        }
         _fetchNearbyOrders(); // Re-fetch orders with the actual location
       }
       _dashLocationStream = Geolocator.getPositionStream(
@@ -96,6 +117,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ).listen((p) { 
         if (mounted) {
           setState(() => _driverPosition = p);
+          // Keep DB location fresh while driver is online
+          if (_isOnline) {
+            LocationService.updateDriverLocationInDb(p.latitude, p.longitude)
+                .catchError((_) {}); // Fire-and-forget, non-blocking
+          }
           _fetchNearbyOrders(); // Re-fetch if driver moves significantly
         }
       });
@@ -166,8 +192,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final hasDriver = dId != null && dId.toString().trim().isNotEmpty && dId.toString().trim() != 'null';
             if (!mounted) return;
             setState(() {
-              // Remove if no longer available (assigned by someone else)
-              if (hasDriver || (status != 'available' && status != 'pending')) {
+              final isAvailableNow = (status == 'available' || status == 'pending') && !hasDriver && _isNearby(order);
+              if (isAvailableNow) {
+                final idx = _nearbyOrders.indexWhere((o) => o['id'] == order['id']);
+                if (idx != -1) {
+                  _nearbyOrders[idx] = order;
+                } else {
+                  _nearbyOrders.insert(0, order);
+                }
+              } else {
                 _nearbyOrders.removeWhere((o) => o['id'] == order['id']);
               }
             });
@@ -303,7 +336,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
         pos = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
                 accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 5)));
-      } catch (_) {}
+      } catch (_) {
+        pos = _driverPosition;
+      }
+      pos ??= _driverPosition;
+
+      if (pos == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.location_disabled_rounded, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Please enable GPS location to accept orders.',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Color(0xFFFF4D00),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
+
+      // ── 50 km Radius Distance Check (with geocoding fallback) ────────────
+      final coords = await ServiceAreaService.resolveOrderCoordinates(order);
+      final double? orderLat = coords?['lat'];
+      final double? orderLng = coords?['lng'];
+
+      if (orderLat != null && orderLng != null) {
+        final distKm = ServiceAreaService.haversineKm(pos.latitude, pos.longitude, orderLat, orderLng);
+        final distMiles = distKm * 0.621371;
+        if (distMiles > 30.0) {
+          debugPrint('[Dashboard] Distance limit exceeded: ${distMiles.toStringAsFixed(1)} miles > 30 miles');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.location_off_rounded, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Order is too far (${distMiles.toStringAsFixed(0)} miles away). You can only accept orders within 30 miles.',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFFFF4D00),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(20),
+              duration: const Duration(seconds: 4),
+            ));
+          }
+          return;
+        }
+      }
 
       final nowTs = DateTime.now().toUtc().toIso8601String();
       final payload = <String, dynamic>{
@@ -314,8 +407,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'driver_photo': profile?['avatar_url'] ?? '',
         'driver_vehicle': profile?['vehicle_type'] ?? 'Fuel Truck',
         'driver_phone': profile?['phone'] ?? '',
-        if (pos != null) 'driver_latitude': pos.latitude,
-        if (pos != null) 'driver_longitude': pos.longitude,
+        'driver_latitude': pos.latitude,
+        'driver_longitude': pos.longitude,
       };
 
       // ── UPDATE: Simple eq-only update (no SQL status/driver_id guards) ──────
@@ -625,6 +718,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .update({'status': value ? 'online' : 'offline'})
             .eq('id', user.id);
       }
+      // When going online, immediately sync last known GPS to DB
+      if (value && _driverPosition != null) {
+        LocationService.updateDriverLocationInDb(
+          _driverPosition!.latitude,
+          _driverPosition!.longitude,
+        ).catchError((_) {}); // Fire-and-forget
+      }
       // Use debounced fetch — prevents double-fire when toggle causes rapid state changes
       _scheduleFetch();
     } catch (e) {
@@ -726,27 +826,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ],
                                 ),
                               ),
-                              // Notification Icon
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => const NotificationsScreen(),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFE8DD),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.notifications_outlined,
-                                    color: Color(0xFFFF4D00),
-                                    size: 22,
-                                  ),
+                              // Notification Bell with live badge
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFE8DD),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
+                                child: const NotificationBell(),
                               ),
                               const SizedBox(width: 8),
                               // Online/Offline Switch
@@ -1317,11 +1403,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String distLabel = '';
     final pos = _driverPosition;
     if (pos != null) {
-      final lat = double.tryParse(order['latitude']?.toString() ?? '');
-      final lng = double.tryParse(order['longitude']?.toString() ?? '');
-      if (lat != null && lng != null) {
+      final latRaw = order['customer_lat'] ?? order['delivery_lat'] ?? order['latitude'] ?? order['delivery_latitude'] ?? order['lat'];
+      final lngRaw = order['customer_lng'] ?? order['delivery_lng'] ?? order['longitude'] ?? order['delivery_longitude'] ?? order['lng'];
+      final lat = double.tryParse(latRaw?.toString() ?? '');
+      final lng = double.tryParse(lngRaw?.toString() ?? '');
+      if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
         final km = _haversineKm(pos.latitude, pos.longitude, lat, lng);
-        distLabel = km < 1 ? l10n.dashboardMetersAway((km * 1000).round()) : l10n.dashboardKmAway(km.toStringAsFixed(1));
+        final miles = km * 0.621371;
+        distLabel = miles < 0.1 ? l10n.dashboardMetersAway((miles * 5280).round()) : l10n.dashboardMilesAway(miles.toStringAsFixed(1));
       }
     }
 

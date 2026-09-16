@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'package:fueldirect_app/l10n/app_localizations.dart';
 import '../../widgets/floating_bottom_nav_bar.dart';
 import '../../services/notification_service.dart';
@@ -72,6 +73,8 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     _ordersChannel?.unsubscribe();
     _driverStatusSubscription?.cancel();
     _locationFilterStream?.cancel();
+    _backgroundLocationStream?.cancel();
+    _backgroundLocationStream = null;
     super.dispose();
   }
 
@@ -85,10 +88,12 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       }
       if (perm == LocationPermission.deniedForever) return;
 
-      // Grab current position immediately for the first filter pass
-      final initial = await Geolocator.getCurrentPosition(
+      // Grab current position immediately for the first filter pass (fast cache first)
+      Position? initial = await Geolocator.getLastKnownPosition();
+      initial ??= await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 5),
         ),
       );
       if (mounted) setState(() => _driverPosition = initial);
@@ -131,11 +136,12 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     final l10n = AppLocalizations.of(context)!;
     final dPos = _driverPosition;
     if (dPos == null) return null;
-    final lat = double.tryParse((order['delivery_lat'] ?? order['latitude'] ?? order['customer_lat'])?.toString() ?? '');
-    final lng = double.tryParse((order['delivery_lng'] ?? order['longitude'] ?? order['customer_lng'])?.toString() ?? '');
+    final lat = double.tryParse((order['delivery_lat'] ?? order['latitude'] ?? order['customer_lat'] ?? order['delivery_latitude'] ?? order['lat'])?.toString() ?? '');
+    final lng = double.tryParse((order['delivery_lng'] ?? order['longitude'] ?? order['customer_lng'] ?? order['delivery_longitude'] ?? order['lng'])?.toString() ?? '');
     if (lat == null || lng == null) return null;
     final km = _distanceKm(dPos.latitude, dPos.longitude, lat, lng);
-    return km < 1 ? l10n.dashboardMetersAway((km * 1000).round()) : l10n.dashboardKmAway(km.toStringAsFixed(1));
+    final miles = km * 0.621371;
+    return miles < 0.1 ? l10n.dashboardMetersAway((miles * 5280).round()) : l10n.dashboardMilesAway(miles.toStringAsFixed(1));
   }
 
   // ── Initial fetch ──────────────────────────────────────────────────
@@ -268,10 +274,10 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception("Not logged in");
 
-      // Verify availability — also fetch user_id to notify the customer
+      // Verify availability — also fetch user_id and coordinates
       final orderRes = await Supabase.instance.client
           .from('orders')
-          .select('status, user_id')
+          .select()
           .eq('id', orderId)
           .maybeSingle();
 
@@ -294,7 +300,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
 
       final nowTs = DateTime.now().toUtc();
 
-      // Get current GPS position (best effort — don't block accept if it fails)
+      // Get current GPS position (best effort)
       Position? currentPos;
       try {
         currentPos = await Geolocator.getCurrentPosition(
@@ -303,7 +309,72 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
             timeLimit: Duration(seconds: 5),
           ),
         );
-      } catch (_) {}
+      } catch (_) {
+        currentPos = _driverPosition;
+      }
+      currentPos ??= _driverPosition;
+
+      if (currentPos == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.location_disabled_rounded, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Please enable GPS location to accept orders.',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFFFF4D00),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(20),
+            ),
+          );
+        }
+        return;
+      }
+
+      // ── 50 km Radius Distance Validation (with geocoding fallback) ─────────
+      final coords = await ServiceAreaService.resolveOrderCoordinates(orderRes);
+      final double? orderLat = coords?['lat'];
+      final double? orderLng = coords?['lng'];
+
+      if (orderLat != null && orderLng != null) {
+        final distKm = _distanceKm(currentPos.latitude, currentPos.longitude, orderLat, orderLng);
+        if (distKm > 50.0) {
+          debugPrint('[Orders] Cannot accept order $orderId: distance ${distKm.toStringAsFixed(1)} km > 50 km limit');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.location_off_rounded, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Order is too far (${distKm.toStringAsFixed(0)} km away). You can only accept orders within 50 km.',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFFFF4D00),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                margin: const EdgeInsets.all(20),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
+      }
 
       final updatePayload = <String, dynamic>{
         'status': 'assigned',
@@ -313,12 +384,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         'driver_photo': driverPhoto,
         'driver_vehicle': driverVehicle,
         'driver_phone': driverPhone,
+        'driver_latitude': currentPos.latitude,
+        'driver_longitude': currentPos.longitude,
       };
-
-      if (currentPos != null) {
-        updatePayload['driver_latitude'] = currentPos.latitude;
-        updatePayload['driver_longitude'] = currentPos.longitude;
-      }
 
       // ── Conditional DB update (race-safe) ─────────────────────────────────
       // Reason: SQL inFilter is case-sensitive and driver_id IS NULL fails on empty strings.
@@ -645,7 +713,6 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
     }
 
     final now = DateTime.now().toUtc();
-    final cutoff24h = now.subtract(const Duration(hours: 24));
 
     final filteredOrders = _orders.where((o) {
       final status = o['status']?.toString().toLowerCase().trim() ?? '';
@@ -663,20 +730,17 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
           (status == 'available' || status == 'pending') && isUnclaimed();
 
       if (_activeFilterIndex == 0) {
+        // Available tab: show all unclaimed available/pending orders within 50 km
         if (!isAvailableStatus()) return false;
-        // ── Service-area proximity filter ──────────────────────────────────
-        final lat = double.tryParse(
-            (o['delivery_lat'] ?? o['latitude'] ?? o['customer_lat'])?.toString() ?? '');
-        final lng = double.tryParse(
-            (o['delivery_lng'] ?? o['longitude'] ?? o['customer_lng'])?.toString() ?? '');
-        return ServiceAreaService.isOrderInServiceAreas(
-          areas: _serviceAreas,
-          driverLat: _driverPosition?.latitude,
-          driverLng: _driverPosition?.longitude,
-          orderLat: lat,
-          orderLng: lng,
-          orderId: o['id']?.toString(),
-        );
+        if (_driverPosition != null) {
+          final lat = double.tryParse((o['delivery_lat'] ?? o['latitude'] ?? o['customer_lat'] ?? o['delivery_latitude'] ?? o['lat'])?.toString() ?? '');
+          final lng = double.tryParse((o['delivery_lng'] ?? o['longitude'] ?? o['customer_lng'] ?? o['delivery_longitude'] ?? o['lng'])?.toString() ?? '');
+          if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+            final km = _distanceKm(_driverPosition!.latitude, _driverPosition!.longitude, lat, lng);
+            if (km > 50.0) return false;
+          }
+        }
+        return true;
       }
       
       if (_activeFilterIndex == 1) {
@@ -722,18 +786,9 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
       }
 
       if (_activeFilterIndex == 4) {
-        // Delivered: Completed orders from last 24h
+        // Delivered: All completed/delivered orders for this driver
         if (driverId != myId) return false;
-        if (!(status == 'delivered' || status == 'completed')) return false;
-        
-        final rawTs = o['delivered_at'] ?? o['completed_at'];
-        if (rawTs == null) return true;
-        try {
-          final ts = DateTime.parse(rawTs.toString()).toUtc();
-          return ts.isAfter(cutoff24h);
-        } catch (_) {
-          return true;
-        }
+        return status == 'delivered' || status == 'completed';
       }
       return false;
     }).toList();
@@ -824,11 +879,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
         if (hasValidSchedule && !isAvailable) {
           try {
             final parsedTime = DateTime.parse(schTime.toString()).toLocal();
-            final int hour = parsedTime.hour;
-            final int min = parsedTime.minute;
-            final String ampm = hour >= 12 ? 'PM' : 'AM';
-            final int displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-            formattedTime = l10n.assignedSchedTime('${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm');
+            formattedTime = l10n.assignedSchedTime(DateFormat('MMM dd, hh:mm a').format(parsedTime));
           } catch (_) {
             formattedTime = l10n.assignedSched;
           }
@@ -836,11 +887,7 @@ class _AssignedOrdersScreenState extends State<AssignedOrdersScreen> {
           if (hasValidSchedule) {
              try {
                 final parsedTime = DateTime.parse(schTime.toString()).toLocal();
-                final int hour = parsedTime.hour;
-                final int min = parsedTime.minute;
-                final String ampm = hour >= 12 ? 'PM' : 'AM';
-                final int displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-                formattedTime = l10n.assignedSchedTime('${displayHour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')} $ampm');
+                formattedTime = l10n.assignedSchedTime(DateFormat('MMM dd, hh:mm a').format(parsedTime));
               } catch (_) {
                 formattedTime = l10n.assignedNew;
               }

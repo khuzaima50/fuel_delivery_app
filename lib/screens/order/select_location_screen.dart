@@ -178,7 +178,7 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
 ]
 ''';
 
-  final LatLng _initialPosition = const LatLng(24.8607, 67.0011); // Karachi base 
+  final LatLng _initialPosition = const LatLng(37.7749, -122.4194); // Default base 
   late LatLng _selectedPosition = _initialPosition;
 
   void _onMapCreated(GoogleMapController controller) {
